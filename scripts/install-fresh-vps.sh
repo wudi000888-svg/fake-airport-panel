@@ -94,6 +94,7 @@ load_existing_env() {
   if [[ ! -f .env ]]; then
     return
   fi
+  local has_deploy_mode=0
   local key value
   while IFS='=' read -r key value; do
     key="${key%%[[:space:]]*}"
@@ -114,6 +115,7 @@ load_existing_env() {
           HY2_PORT="${HY2_PORT:-$value}"
         fi ;;
       DEPLOY_MODE)
+        has_deploy_mode=1
         if [[ "$RENEW_CERT" == "1" && "$DEPLOY_MODE" == "docker" ]]; then
           DEPLOY_MODE="$value"
         else
@@ -127,6 +129,13 @@ load_existing_env() {
         fi ;;
     esac
   done <.env
+  if [[ "$RENEW_CERT" == "1" && "$has_deploy_mode" == "0" && "$DEPLOY_MODE" == "docker" ]]; then
+    local tcp443
+    tcp443="$(port_users tcp 443 || true)"
+    if grep -qi "nginx" <<<"$tcp443"; then
+      DEPLOY_MODE="native-nginx"
+    fi
+  fi
 }
 
 need_root() {
