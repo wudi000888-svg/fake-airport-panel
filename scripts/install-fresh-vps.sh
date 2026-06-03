@@ -880,25 +880,7 @@ PY
 }
 
 sync_node_exit_names() {
-  docker exec -i xray-proxy-panel python3 - <<'PY'
-import sys
-
-sys.path.insert(0, "/app")
-
-import node_catalog
-import operations_service as ops
-
-store = node_catalog.load_catalog()
-updated = []
-for node in list(store.get("nodes", [])):
-    try:
-        refreshed = ops.apply_node_exit_info(dict(node))
-        node_catalog.upsert_node(refreshed)
-        updated.append(f"{refreshed.get('id')} => {refreshed.get('name')}")
-    except Exception as exc:
-        updated.append(f"{node.get('id')} => 检测失败: {exc}")
-print("\n".join(updated))
-PY
+  docker exec -i xray-proxy-panel python3 /app/sync_node_exit_names.py
 }
 
 final_start_and_check() {
