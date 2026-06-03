@@ -133,6 +133,28 @@ sudo bash scripts/install-fresh-vps.sh
 
 脚本会提示填写根域名、面板域名、Hysteria2 域名、VLESS 域名和证书邮箱，并自动启用 BBR、生成运行态、签发证书、启动 Docker Compose，最后输出管理员账号密码。
 
+如果 DNS 暂时没有生效、TCP 80 不通或 Let's Encrypt 申请失败，脚本会自动生成临时自签证书作为兜底，保证面板和服务可以先启动。自签证书只适合临时排障，浏览器会提示不受信任，Hysteria2 客户端可能需要临时开启 `allowInsecure` / `insecure`。
+
+DNS 和端口修复后，可以只补签正式证书，不需要重装面板：
+
+```bash
+cd /opt/fake-airport
+sudo bash scripts/install-fresh-vps.sh --renew-cert --yes
+```
+
+也可以显式传入参数：
+
+```bash
+sudo bash scripts/install-fresh-vps.sh --renew-cert \
+  --root-domain example.com \
+  --panel-domain panel.example.com \
+  --hy2-domain hy.example.com \
+  --vless-domain vless.example.com \
+  --email admin@example.com \
+  --reality-sni www.cloudflare.com \
+  --yes
+```
+
 也可以提前传入域名参数，适合重装系统后直接复刻：
 
 ```bash

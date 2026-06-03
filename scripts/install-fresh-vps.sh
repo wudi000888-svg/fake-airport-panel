@@ -14,6 +14,9 @@ AUTO_YES="${AUTO_YES:-0}"
 DEPLOY_MODE="${DEPLOY_MODE:-docker}"
 ALLOW_NATIVE_443_REWRITE="${ALLOW_NATIVE_443_REWRITE:-0}"
 HY2_PORT="${HY2_PORT:-443}"
+RENEW_CERT="${RENEW_CERT:-0}"
+CERT_MODE="unknown"
+CERT_FALLBACK_REASON=""
 
 usage() {
   cat <<'EOF'
@@ -46,6 +49,7 @@ usage() {
   --allow-nginx-443-rewrite
                      native-nginx 模式下允许继续配置 stream 443。
                      如果原生 Nginx 已有 HTTPS 站点，请先确认不会冲突。
+  --renew-cert       只重新申请正式证书，不重置面板数据。适合自签证书兜底后补签。
   -y, --yes          DNS 确认时自动继续
   -h, --help         显示帮助
 EOF
@@ -72,6 +76,8 @@ parse_args() {
         DEPLOY_MODE="${2:-}"; shift 2 ;;
       --allow-nginx-443-rewrite)
         ALLOW_NATIVE_443_REWRITE=1; shift ;;
+      --renew-cert)
+        RENEW_CERT=1; shift ;;
       -y|--yes)
         AUTO_YES=1; shift ;;
       -h|--help)
@@ -82,6 +88,45 @@ parse_args() {
         exit 1 ;;
     esac
   done
+}
+
+load_existing_env() {
+  if [[ ! -f .env ]]; then
+    return
+  fi
+  local key value
+  while IFS='=' read -r key value; do
+    key="${key%%[[:space:]]*}"
+    value="${value%$'\r'}"
+    value="${value%\"}"
+    value="${value#\"}"
+    case "$key" in
+      PANEL_DOMAIN) PANEL_DOMAIN="${PANEL_DOMAIN:-$value}" ;;
+      HY2_DOMAIN) HY2_DOMAIN="${HY2_DOMAIN:-$value}" ;;
+      ROOT_DOMAIN) ROOT_DOMAIN="${ROOT_DOMAIN:-$value}" ;;
+      DEFAULT_VLESS_ADDRESS) VLESS_DOMAIN="${VLESS_DOMAIN:-$value}" ;;
+      LE_EMAIL) LE_EMAIL="${LE_EMAIL:-$value}" ;;
+      REALITY_SNI) REALITY_SNI="${REALITY_SNI:-$value}" ;;
+      HY2_PORT)
+        if [[ "$RENEW_CERT" == "1" && "$HY2_PORT" == "443" ]]; then
+          HY2_PORT="$value"
+        else
+          HY2_PORT="${HY2_PORT:-$value}"
+        fi ;;
+      DEPLOY_MODE)
+        if [[ "$RENEW_CERT" == "1" && "$DEPLOY_MODE" == "docker" ]]; then
+          DEPLOY_MODE="$value"
+        else
+          DEPLOY_MODE="${DEPLOY_MODE:-$value}"
+        fi ;;
+      ALLOW_NATIVE_443_REWRITE)
+        if [[ "$RENEW_CERT" == "1" && "$ALLOW_NATIVE_443_REWRITE" == "0" ]]; then
+          ALLOW_NATIVE_443_REWRITE="$value"
+        else
+          ALLOW_NATIVE_443_REWRITE="${ALLOW_NATIVE_443_REWRITE:-$value}"
+        fi ;;
+    esac
+  done <.env
 }
 
 need_root() {
@@ -334,6 +379,7 @@ install_native_nginx() {
 
 write_env() {
   cat >.env <<EOF
+ROOT_DOMAIN=$ROOT_DOMAIN
 PANEL_DOMAIN=$PANEL_DOMAIN
 HY2_DOMAIN=$HY2_DOMAIN
 PUBLIC_BASE_URL=https://$PANEL_DOMAIN
@@ -346,6 +392,8 @@ HY2_PORT=$HY2_PORT
 REALITY_SNI=$REALITY_SNI
 XRAY_REALITY_PORT=8443
 LE_EMAIL=$LE_EMAIL
+DEPLOY_MODE=$DEPLOY_MODE
+ALLOW_NATIVE_443_REWRITE=$ALLOW_NATIVE_443_REWRITE
 TZ=Asia/Hong_Kong
 XRAY_IMAGE=ghcr.io/xtls/xray-core:latest
 PANEL_IMAGE=xray-proxy-panel:local
@@ -617,6 +665,84 @@ copy_native_certs() {
   cp -Lf "/etc/letsencrypt/live/$PANEL_DOMAIN/cert.pem" "data/letsencrypt/live/$PANEL_DOMAIN/cert.pem" || true
 }
 
+reload_entry_after_cert() {
+  if [[ "$DEPLOY_MODE" == "docker" ]]; then
+    docker restart xray-proxy-nginx >/dev/null 2>&1 || true
+  elif [[ "$DEPLOY_MODE" == "native-nginx" ]]; then
+    systemctl reload nginx >/dev/null 2>&1 || true
+  fi
+}
+
+link_hy2_cert_to_panel_cert() {
+  mkdir -p "data/letsencrypt/live/$HY2_DOMAIN"
+  if [[ "$HY2_DOMAIN" != "$PANEL_DOMAIN" ]]; then
+    ln -sf "../$PANEL_DOMAIN/fullchain.pem" "data/letsencrypt/live/$HY2_DOMAIN/fullchain.pem"
+    ln -sf "../$PANEL_DOMAIN/privkey.pem" "data/letsencrypt/live/$HY2_DOMAIN/privkey.pem"
+    ln -sf "../$PANEL_DOMAIN/chain.pem" "data/letsencrypt/live/$HY2_DOMAIN/chain.pem" || true
+    ln -sf "../$PANEL_DOMAIN/cert.pem" "data/letsencrypt/live/$HY2_DOMAIN/cert.pem" || true
+  fi
+}
+
+generate_self_signed_cert() {
+  local reason="${1:-Let's Encrypt 证书申请失败}"
+  local cert_dir="data/letsencrypt/live/$PANEL_DOMAIN"
+  local tmp_conf
+  CERT_MODE="self-signed"
+  CERT_FALLBACK_REASON="$reason"
+  mkdir -p "$cert_dir" "data/letsencrypt/live/$HY2_DOMAIN"
+  tmp_conf="$(mktemp)"
+  cat >"$tmp_conf" <<EOF
+[req]
+default_bits = 2048
+prompt = no
+default_md = sha256
+distinguished_name = dn
+x509_extensions = v3_req
+
+[dn]
+CN = $PANEL_DOMAIN
+
+[v3_req]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = $PANEL_DOMAIN
+DNS.2 = $HY2_DOMAIN
+DNS.3 = $ROOT_DOMAIN
+EOF
+  openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+    -keyout "$cert_dir/privkey.pem" \
+    -out "$cert_dir/fullchain.pem" \
+    -config "$tmp_conf" >/dev/null 2>&1
+  cp "$cert_dir/fullchain.pem" "$cert_dir/cert.pem"
+  cp "$cert_dir/fullchain.pem" "$cert_dir/chain.pem"
+  rm -f "$tmp_conf"
+  link_hy2_cert_to_panel_cert
+  chmod 600 "$cert_dir/privkey.pem" "$cert_dir/fullchain.pem" "$cert_dir/cert.pem" "$cert_dir/chain.pem" 2>/dev/null || true
+  echo "SELF_SIGNED" >data/letsencrypt/CERT_MODE
+  cat >data/letsencrypt/SELF_SIGNED_NOTICE.txt <<EOF
+当前使用自签证书。
+原因: $reason
+
+影响:
+- 面板可以启动，但浏览器会提示证书不受信任。
+- Hysteria2 客户端可能需要开启 allowInsecure / insecure 才能测试。
+- 生产环境建议尽快补签 Let's Encrypt 正式证书。
+
+DNS/端口修复后执行:
+sudo bash $APP_DIR/scripts/install-fresh-vps.sh --renew-cert \\
+  --root-domain $ROOT_DOMAIN \\
+  --panel-domain $PANEL_DOMAIN \\
+  --hy2-domain $HY2_DOMAIN \\
+  --vless-domain $VLESS_DOMAIN \\
+  --email $LE_EMAIL \\
+  --reality-sni $REALITY_SNI \\
+  --hy2-port $HY2_PORT \\
+  --mode $DEPLOY_MODE \\
+  --yes
+EOF
+}
+
 apply_native_nginx_final() {
   cp generated/nginx/panel-http-acme.conf /etc/nginx/conf.d/xray-proxy-panel-acme.conf
   cp generated/nginx/panel-local-https.conf /etc/nginx/conf.d/xray-proxy-panel-local-https.conf
@@ -673,13 +799,9 @@ start_for_certbot() {
   fi
   mkdir -p "data/letsencrypt/live/$PANEL_DOMAIN"
   if [[ ! -f "data/letsencrypt/live/$PANEL_DOMAIN/fullchain.pem" ]]; then
-    openssl req -x509 -nodes -newkey rsa:2048 -days 1 -subj "/CN=$PANEL_DOMAIN" \
-      -keyout "data/letsencrypt/live/$PANEL_DOMAIN/privkey.pem" \
-      -out "data/letsencrypt/live/$PANEL_DOMAIN/fullchain.pem" >/dev/null 2>&1
+    generate_self_signed_cert "安装预启动占位证书，等待正式证书申请。"
   fi
-  mkdir -p "data/letsencrypt/live/$HY2_DOMAIN"
-  ln -sf "../$PANEL_DOMAIN/fullchain.pem" "data/letsencrypt/live/$HY2_DOMAIN/fullchain.pem"
-  ln -sf "../$PANEL_DOMAIN/privkey.pem" "data/letsencrypt/live/$HY2_DOMAIN/privkey.pem"
+  link_hy2_cert_to_panel_cert
   compose build panel xray
   if [[ "$DEPLOY_MODE" == "docker" ]]; then
     compose up -d nginx
@@ -701,25 +823,41 @@ issue_cert() {
   rm -rf "data/letsencrypt/live/$PANEL_DOMAIN" "data/letsencrypt/live/$HY2_DOMAIN" \
     "data/letsencrypt/archive/$PANEL_DOMAIN" "data/letsencrypt/archive/$HY2_DOMAIN" \
     "data/letsencrypt/renewal/$PANEL_DOMAIN.conf" "data/letsencrypt/renewal/$HY2_DOMAIN.conf"
+  generate_self_signed_cert "证书申请前的临时占位证书，保证 Nginx 可以启动。"
   compose_up_entry
   sleep 2
+  rm -rf "data/letsencrypt/live/$PANEL_DOMAIN" "data/letsencrypt/live/$HY2_DOMAIN" \
+    "data/letsencrypt/archive/$PANEL_DOMAIN" "data/letsencrypt/archive/$HY2_DOMAIN" \
+    "data/letsencrypt/renewal/$PANEL_DOMAIN.conf" "data/letsencrypt/renewal/$HY2_DOMAIN.conf"
+  local rc=0
   if [[ "$DEPLOY_MODE" == "docker" ]]; then
     compose run --rm certbot certonly --webroot -w /var/www/certbot \
       -d "$PANEL_DOMAIN" -d "$HY2_DOMAIN" \
-      --email "$LE_EMAIL" --agree-tos --no-eff-email
+      --email "$LE_EMAIL" --agree-tos --no-eff-email --non-interactive || rc=$?
   else
     certbot certonly --webroot -w "$APP_DIR/data/acme" \
       -d "$PANEL_DOMAIN" -d "$HY2_DOMAIN" \
-      --email "$LE_EMAIL" --agree-tos --no-eff-email
-    copy_native_certs
+      --email "$LE_EMAIL" --agree-tos --no-eff-email --non-interactive || rc=$?
+    if [[ "$rc" == "0" ]]; then
+      copy_native_certs
+    fi
   fi
-  if [[ "$HY2_DOMAIN" != "$PANEL_DOMAIN" ]]; then
-    mkdir -p "data/letsencrypt/live/$HY2_DOMAIN"
-    ln -sf "../$PANEL_DOMAIN/fullchain.pem" "data/letsencrypt/live/$HY2_DOMAIN/fullchain.pem"
-    ln -sf "../$PANEL_DOMAIN/privkey.pem" "data/letsencrypt/live/$HY2_DOMAIN/privkey.pem"
-    ln -sf "../$PANEL_DOMAIN/chain.pem" "data/letsencrypt/live/$HY2_DOMAIN/chain.pem" || true
-    ln -sf "../$PANEL_DOMAIN/cert.pem" "data/letsencrypt/live/$HY2_DOMAIN/cert.pem" || true
+
+  if [[ "$rc" != "0" ]]; then
+    echo
+    echo "Let's Encrypt 正式证书申请失败，错误码: $rc"
+    echo "脚本将生成自签证书作为兜底，保证面板和服务可以先启动。"
+    generate_self_signed_cert "Let's Encrypt 申请失败，错误码: $rc。常见原因是 DNS 未生效、Cloudflare 未设为仅 DNS、TCP 80 不通或端口被占用。"
+    reload_entry_after_cert
+    return
   fi
+
+  CERT_MODE="letsencrypt"
+  CERT_FALLBACK_REASON=""
+  echo "LETSENCRYPT" >data/letsencrypt/CERT_MODE
+  rm -f data/letsencrypt/SELF_SIGNED_NOTICE.txt
+  link_hy2_cert_to_panel_cert
+  reload_entry_after_cert
 }
 
 generate_hy2_config() {
@@ -804,6 +942,32 @@ PY
   fi
 }
 
+renew_cert_only() {
+  if [[ ! -f .env ]]; then
+    echo "未找到 .env。请在已安装的项目目录中运行 --renew-cert，或先完整安装一次。" >&2
+    exit 1
+  fi
+  write_env
+  init_dirs
+  install_docker
+  if [[ "$DEPLOY_MODE" == "native-nginx" ]]; then
+    install_native_nginx
+    write_native_nginx_templates
+    apply_native_nginx_http_only
+  else
+    compose build panel xray
+  fi
+  issue_cert
+  if [[ "$DEPLOY_MODE" == "docker" ]]; then
+    compose up -d nginx hysteria2 panel xray
+  elif [[ "$DEPLOY_MODE" == "native-nginx" ]]; then
+    compose up -d hysteria2 panel xray
+    apply_native_nginx_final
+  fi
+  print_summary
+  exit 0
+}
+
 print_summary() {
   local bbr
   bbr="$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)"
@@ -814,15 +978,16 @@ print_summary() {
 ============================================================
 面板地址: https://$PANEL_DOMAIN/login
 管理员账号: admin
-管理员密码: $ADMIN_PASS
+管理员密码: ${ADMIN_PASS:-见 $APP_DIR/data/DEPLOY-SECRETS.txt}
 
 VLESS 地址: $VLESS_DOMAIN:443
 VLESS Reality SNI: $REALITY_SNI
-VLESS PublicKey: $REALITY_PUBLIC_KEY
-VLESS ShortID: $REALITY_SHORT_ID
+VLESS PublicKey: ${REALITY_PUBLIC_KEY:-见 $APP_DIR/data/DEPLOY-SECRETS.txt}
+VLESS ShortID: ${REALITY_SHORT_ID:-见 $APP_DIR/data/DEPLOY-SECRETS.txt}
 Hysteria2 域名: $HY2_DOMAIN:$HY2_PORT
 BBR: $bbr
 部署模式: $DEPLOY_MODE
+证书模式: ${CERT_MODE:-unknown}
 
 敏感信息已保存到:
 $APP_DIR/data/DEPLOY-SECRETS.txt
@@ -839,10 +1004,41 @@ docker compose logs --tail=100 panel
 docker exec xray-proxy-panel python3 /app/enforce_users.py
 ============================================================
 EOF
+  if [[ "${CERT_MODE:-}" == "self-signed" ]]; then
+    cat <<EOF
+
+============================================================
+证书兜底提示
+============================================================
+当前使用的是自签证书，不是 Let's Encrypt 正式证书。
+原因: ${CERT_FALLBACK_REASON:-证书申请失败或预启动占位证书仍在使用。}
+
+你现在可以先访问面板，但浏览器会提示证书不受信任:
+  https://$PANEL_DOMAIN/login
+
+移动端 Hysteria2 如果需要临时测试，客户端可能需要开启:
+  allowInsecure / insecure / 跳过证书验证
+
+等 DNS 生效、Cloudflare 改成「仅 DNS」、TCP 80/443 放通后，执行下面命令补签正式证书:
+
+sudo bash $APP_DIR/scripts/install-fresh-vps.sh --renew-cert \\
+  --root-domain $ROOT_DOMAIN \\
+  --panel-domain $PANEL_DOMAIN \\
+  --hy2-domain $HY2_DOMAIN \\
+  --vless-domain $VLESS_DOMAIN \\
+  --email $LE_EMAIL \\
+  --reality-sni $REALITY_SNI \\
+  --hy2-port $HY2_PORT \\
+  --mode $DEPLOY_MODE \\
+  --yes
+============================================================
+EOF
+  fi
 }
 
 parse_args "$@"
 need_root
+load_existing_env
 
 PUBLIC_IP="$(curl -4sS --connect-timeout 8 https://api.ipify.org || true)"
 echo "检测到当前 VPS 公网 IP: ${PUBLIC_IP:-未知}"
@@ -854,6 +1050,9 @@ echo "  vless.example.com  A  ${PUBLIC_IP:-你的VPS IP}"
 echo "  example.com        A  ${PUBLIC_IP:-你的VPS IP}"
 echo
 
+if [[ "$RENEW_CERT" == "1" && -z "$ROOT_DOMAIN" && -n "$PANEL_DOMAIN" ]]; then
+  ROOT_DOMAIN="${PANEL_DOMAIN#*.}"
+fi
 ask ROOT_DOMAIN "请输入根域名，例如 example.com"
 ROOT_DOMAIN="$(normalize_domain "$ROOT_DOMAIN")"
 validate_domain "根域名" "$ROOT_DOMAIN"
@@ -864,6 +1063,10 @@ ask LE_EMAIL "请输入 Let's Encrypt 邮箱" "admin@$ROOT_DOMAIN"
 ask REALITY_SNI "请输入 Reality 分流 SNI" "www.cloudflare.com"
 ask HY2_PORT "请输入 Hysteria2 UDP 端口" "443"
 normalize_and_validate_inputs
+
+if [[ "$RENEW_CERT" == "1" ]]; then
+  renew_cert_only
+fi
 
 cat <<EOF
 
