@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+import json
+import os
+import secrets
+import sys
+import uuid
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+BASELINE = ROOT / "baseline"
+if str(BASELINE) not in sys.path:
+    sys.path.insert(0, str(BASELINE))
+
+os.environ.setdefault("PANEL_DIR", str(ROOT / ".demo-runtime" / "panel"))
+os.environ.setdefault("PUBLIC_BASE_URL", "https://panel.example.com")
+os.environ.setdefault("PANEL_DOMAIN", "panel.example.com")
+os.environ.setdefault("HY2_DOMAIN", "hy.example.com")
+os.environ.setdefault("DEFAULT_VLESS_ADDRESS", "vless.example.com")
+os.environ.setdefault("XRAY_CONFIG", str(ROOT / ".demo-runtime" / "xray" / "config.json"))
+os.environ.setdefault("HY2_ENV_FILE", str(ROOT / ".demo-runtime" / "hysteria2" / ".env"))
+os.environ.setdefault("HY2_CONFIG_FILE", str(ROOT / ".demo-runtime" / "hysteria2" / "server.yaml"))
+
+import auth_store
+from json_store import save_json
+from panel_config import (
+    ADMIN_PROFILE_FILE,
+    AUDIT_LOG_FILE,
+    AUTH_FILE,
+    HY2_CONFIG_FILE,
+    HY2_ENV_FILE,
+    LINK_SETTINGS_FILE,
+    NODE_CATALOG_FILE,
+    ORDERS_FILE,
+    PANEL_DIR,
+    PLANS_FILE,
+    REGISTRATION_FILE,
+    SUB_ACCESS_LOG_FILE,
+    USERS_FILE,
+    XRAY_CONFIG,
+)
+
+
+def iso_days(days):
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat()
+
+
+def gb(value):
+    return int(float(value) * 1024 * 1024 * 1024)
+
+
+def write_text(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def user(name, plan, days, used, quota, note, node_ids=None):
+    primary_uuid = str(uuid.uuid4())
+    vless_nodes = ["vless-main", "vless-proxy-1", "vless-proxy-2", "vless-proxy-3"]
+    return {
+        "enabled": True,
+        "expires_at": iso_days(days),
+        "note": note,
+        "quota_bytes": gb(quota),
+        "used_bytes": gb(used),
+        "plan_id": plan,
+        "node_groups": ["default"],
+        "node_ids": node_ids or [],
+        "sub_token": secrets.token_urlsafe(18),
+        "vless_uuid": primary_uuid,
+        "vless_node_uuids": {node_id: (primary_uuid if node_id == "vless-main" else str(uuid.uuid4())) for node_id in vless_nodes},
+        "hy2_username": name,
+        "hy2_password": secrets.token_urlsafe(18),
+        "panel_password": auth_store.make_password_hash("demo123456"),
+        "last_hy2_stats": {"tx": 0, "rx": 0},
+    }
+
+
+def main():
+    PANEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    save_json(
+        AUTH_FILE,
+        {
+            "session_secret": secrets.token_urlsafe(32),
+            "users": {
+                "admin": {"role": "admin", "password": auth_store.make_password_hash("adminpass")},
+                "viewer": {"role": "user", "password": auth_store.make_password_hash("viewerpass")},
+            },
+        },
+    )
+
+    save_json(
+        PLANS_FILE,
+        {
+            "version": 1,
+            "plans": [
+                {"id": "starter", "name": "入门套餐", "days": 30, "traffic_gb": 100, "price": 19, "node_groups": ["default"], "enabled": True, "sort": 10},
+                {"id": "standard", "name": "标准套餐", "days": 30, "traffic_gb": 300, "price": 39, "node_groups": ["default"], "enabled": True, "sort": 20},
+                {"id": "pro", "name": "进阶套餐", "days": 30, "traffic_gb": 800, "price": 89, "node_groups": ["default"], "enabled": True, "sort": 30},
+            ],
+        },
+    )
+
+    save_json(
+        NODE_CATALOG_FILE,
+        {
+            "version": 1,
+            "vless_defaults_initialized": True,
+            "nodes": [
+                {"id": "vless-main", "name": "VLESS 直连", "kind": "vless", "group": "default", "region": "", "multiplier": 1, "status": "online", "enabled": True, "sort": 10, "outbound_mode": "direct", "exit_ip": "203.0.113.10", "country_code": "SG", "country": "Singapore", "city": "Singapore"},
+                {"id": "vless-proxy-1", "name": "VLESS HTTP 出口", "kind": "vless", "group": "default", "region": "", "multiplier": 1, "status": "online", "enabled": True, "sort": 11, "outbound_mode": "http", "proxy_addr": "198.51.100.20", "proxy_port": "51000", "proxy_user": "demo-user", "proxy_password": "demo-password", "proxy_test_ip": "198.51.100.21", "exit_ip": "198.51.100.21", "country_code": "JP", "country": "Japan", "city": "Tokyo"},
+                {"id": "vless-proxy-2", "name": "VLESS SOCKS5 出口", "kind": "vless", "group": "default", "region": "", "multiplier": 1, "status": "online", "enabled": True, "sort": 12, "outbound_mode": "socks5", "proxy_addr": "198.51.100.30", "proxy_port": "51001", "proxy_user": "demo-user", "proxy_password": "demo-password", "proxy_test_ip": "198.51.100.31", "exit_ip": "198.51.100.31", "country_code": "US", "country": "United States", "city": "Los Angeles"},
+                {"id": "vless-proxy-3", "name": "VLESS 备用出口", "kind": "vless", "group": "default", "region": "", "multiplier": 1, "status": "maintenance", "enabled": False, "sort": 13, "outbound_mode": "direct", "exit_ip": "203.0.113.40", "country_code": "HK", "country": "Hong Kong", "city": "Hong Kong"},
+                {"id": "hy2-main", "name": "Hysteria2", "kind": "hy2", "group": "default", "region": "", "multiplier": 1, "status": "online", "enabled": True, "sort": 20, "exit_ip": "203.0.113.10", "country_code": "SG", "country": "Singapore", "city": "Singapore"},
+            ],
+        },
+    )
+
+    save_json(
+        USERS_FILE,
+        {
+            "version": 1,
+            "users": {
+                "alice": user("alice", "standard", 18, 126, 300, "标准套餐用户"),
+                "bob": user("bob", "starter", 6, 88, 100, "只开放直连节点", ["vless-main", "hy2-main"]),
+                "carol": user("carol", "pro", 43, 215, 800, "测试多出口节点"),
+            },
+        },
+    )
+
+    save_json(
+        ORDERS_FILE,
+        {
+            "version": 1,
+            "orders": [
+                {"id": "ord_demo_pending", "username": "alice", "kind": "renew", "plan_id": "standard", "plan_name": "标准套餐", "days": 30, "traffic_gb": 300, "amount": 39, "status": "pending", "note": "线下付款待确认", "operator": "user", "created_at": iso_days(-1)},
+                {"id": "ord_demo_done", "username": "carol", "kind": "create", "plan_id": "pro", "plan_name": "进阶套餐", "days": 30, "traffic_gb": 800, "amount": 89, "status": "completed", "note": "演示订单", "operator": "admin", "created_at": iso_days(-5)},
+            ],
+        },
+    )
+
+    save_json(REGISTRATION_FILE, {"version": 1, "registrations": [], "password_resets": []})
+    save_json(
+        ADMIN_PROFILE_FILE,
+        {
+            "version": 1,
+            "user": {
+                "enabled": True,
+                "expires_at": iso_days(365),
+                "sub_token": secrets.token_urlsafe(18),
+                "vless_uuid": str(uuid.uuid4()),
+                "vless_node_uuids": {
+                    "vless-main": str(uuid.uuid4()),
+                    "vless-proxy-1": str(uuid.uuid4()),
+                    "vless-proxy-2": str(uuid.uuid4()),
+                    "vless-proxy-3": str(uuid.uuid4()),
+                },
+                "hy2_username": "demo-admin",
+                "hy2_password": secrets.token_urlsafe(18),
+                "node_groups": ["default"],
+                "quota_bytes": 0,
+                "used_bytes": 0,
+            },
+        },
+    )
+    save_json(
+        LINK_SETTINGS_FILE,
+        {
+            "vless_address": "vless.example.com",
+            "vless_port": 443,
+            "vless_name": "VLESS_Reality_vless.example.com",
+            "hy2_name": "HY2_hy.example.com",
+        },
+    )
+
+    write_text(AUDIT_LOG_FILE, "[demo] admin node.refresh vless-main\n[demo] admin user.create alice\n")
+    write_text(SUB_ACCESS_LOG_FILE, '{"ts":"demo","username":"alice","ip":"198.51.100.8","status":"ok","path":"/sub/demo/raw","ua":"Mihomo"}\n')
+    write_text(
+        XRAY_CONFIG,
+        json.dumps(
+            {
+                "inbounds": [
+                    {
+                        "tag": "vless-reality-in",
+                        "listen": "127.0.0.1",
+                        "port": 8443,
+                        "protocol": "vless",
+                        "settings": {"clients": [{"id": str(uuid.uuid4()), "flow": "xtls-rprx-vision"}]},
+                        "streamSettings": {
+                            "network": "tcp",
+                            "security": "reality",
+                            "realitySettings": {
+                                "serverNames": ["www.cloudflare.com"],
+                                "shortIds": ["0123456789abcdef"],
+                                "privateKey": "demo-private-key",
+                            },
+                        },
+                    }
+                ],
+                "outbounds": [{"tag": "direct", "protocol": "freedom"}],
+                "routing": {"rules": []},
+            },
+            indent=2,
+        ),
+    )
+    write_text(HY2_ENV_FILE, "HY_DOMAIN=hy.example.com\nHY_PASSWORD=demo-hy2-password\nHY_PORT=443\n")
+    write_text(
+        HY2_CONFIG_FILE,
+        "listen: :443\nauth:\n  type: password\n  password: demo-hy2-password\noutbounds:\n  - name: direct\n    type: direct\n",
+    )
+    print(PANEL_DIR)
+
+
+if __name__ == "__main__":
+    main()

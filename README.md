@@ -36,6 +36,22 @@
 | 安全 | JSON 原子写入、配置校验、失败回滚、订阅访问限流 |
 | 部署 | 支持宿主机运行，也提供 Docker Compose 迁移方案 |
 
+## 界面预览
+
+以下截图来自本地 demo 数据，只用于展示运行效果，不包含真实域名、用户密码、订阅 token 或代理账号。
+
+| 登录 | 运营概览 |
+|---|---|
+| ![登录](docs/screenshots/01-login.png) | ![运营概览](docs/screenshots/02-admin-dashboard.png) |
+
+| 节点维护 | 用户管理 |
+|---|---|
+| ![节点维护](docs/screenshots/03-node-management.png) | ![用户管理](docs/screenshots/04-user-management.png) |
+
+| 套餐管理 |
+|---|
+| ![套餐管理](docs/screenshots/05-plans.png) |
+
 ## 项目结构
 
 | 路径 | 说明 |
