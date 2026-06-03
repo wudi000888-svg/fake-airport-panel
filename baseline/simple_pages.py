@@ -31,7 +31,7 @@ label{{font-weight:700;color:#334155;}}
 def login(error=""):
     err = f'<div class="error">{esc(error)}</div>' if error else ""
     body = f"""
-<h1>虚假机场</h1>
+<h1>fake-ui</h1>
 <p>请登录后进入管理界面。</p>
 {err}
 <form method="post" action="/login">
