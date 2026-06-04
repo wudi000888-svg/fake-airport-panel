@@ -33,6 +33,7 @@ from panel_config import (
     LINK_SETTINGS_FILE,
     NODE_CATALOG_FILE,
     ORDERS_FILE,
+    PAYMENTS_FILE,
     PANEL_DIR,
     PLANS_FILE,
     REGISTRATION_FILE,
@@ -123,6 +124,7 @@ def main():
         {
             "version": 1,
             "users": {
+                "viewer": user("viewer", "standard", 21, 42, 300, "本地演示登录用户"),
                 "alice": user("alice", "standard", 18, 126, 300, "标准套餐用户"),
                 "bob": user("bob", "starter", 6, 88, 100, "只开放直连节点", ["vless-main", "hy2-main"]),
                 "carol": user("carol", "pro", 43, 215, 800, "测试多出口节点"),
@@ -135,9 +137,52 @@ def main():
         {
             "version": 1,
             "orders": [
+                {"id": "ord_demo_viewer_waiting", "username": "viewer", "kind": "renew", "plan_id": "standard", "plan_name": "标准套餐", "days": 30, "traffic_gb": 300, "amount": 39, "status": "pending", "payment_status": "awaiting_payment", "payment_id": "pay_demo_viewer", "note": "链上付款演示", "operator": "user", "created_at": iso_days(-1)},
+                {"id": "ord_demo_viewer_done", "username": "viewer", "kind": "create", "plan_id": "starter", "plan_name": "入门套餐", "days": 30, "traffic_gb": 100, "amount": 19, "status": "completed", "payment_status": "confirmed", "note": "历史订单演示", "operator": "system", "created_at": iso_days(-7)},
                 {"id": "ord_demo_pending", "username": "alice", "kind": "renew", "plan_id": "standard", "plan_name": "标准套餐", "days": 30, "traffic_gb": 300, "amount": 39, "status": "pending", "note": "线下付款待确认", "operator": "user", "created_at": iso_days(-1)},
                 {"id": "ord_demo_done", "username": "carol", "kind": "create", "plan_id": "pro", "plan_name": "进阶套餐", "days": 30, "traffic_gb": 800, "amount": 89, "status": "completed", "note": "演示订单", "operator": "admin", "created_at": iso_days(-5)},
             ],
+        },
+    )
+
+    save_json(
+        PAYMENTS_FILE,
+        {
+            "version": 1,
+            "methods": [
+                {
+                    "id": "usdt-bsc-demo",
+                    "label": "USDT / BSC",
+                    "asset": "USDT",
+                    "chain": "bsc",
+                    "address": "0x15878544950c5391fdc43be8c84d0c822bda85db",
+                    "decimals": 6,
+                    "confirmations_required": 3,
+                    "enabled": True,
+                    "sort": 100,
+                    "created_at": iso_days(-10),
+                    "updated_at": iso_days(-1),
+                }
+            ],
+            "payments": [
+                {
+                    "id": "pay_demo_viewer",
+                    "order_id": "ord_demo_viewer_waiting",
+                    "username": "viewer",
+                    "method_id": "usdt-bsc-demo",
+                    "asset": "USDT",
+                    "chain": "bsc",
+                    "address": "0x15878544950c5391fdc43be8c84d0c822bda85db",
+                    "amount_usd": "39",
+                    "crypto_amount": "39.000000",
+                    "status": "awaiting_payment",
+                    "confirmations": 0,
+                    "qr_payload": "0x15878544950c5391fdc43be8c84d0c822bda85db",
+                    "created_at": iso_days(-1),
+                    "updated_at": iso_days(-1),
+                }
+            ],
+            "rates": {"overrides": {"USDT": "1"}, "cache": {}},
         },
     )
 

@@ -53,6 +53,20 @@ class SQLitePlansRepository(SQLiteRepository):
             ).fetchone()
         return self._inflate(row) if row else None
 
+    def set_enabled(self, plan_id, enabled):
+        plan = self.get(plan_id)
+        if not plan:
+            raise RuntimeError("plan not found")
+        plan["enabled"] = bool(enabled)
+        return self.upsert(plan)
+
+    def delete(self, plan_id):
+        with self.transaction() as conn:
+            cursor = conn.execute("delete from plans where id = ?", (plan_id,))
+            if cursor.rowcount == 0:
+                raise RuntimeError("plan not found")
+        return True
+
     def _inflate(self, row):
         plan = load_json(row["data_json"])
         plan.update(

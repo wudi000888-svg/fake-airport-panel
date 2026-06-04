@@ -67,6 +67,14 @@ class SQLiteOrdersRepository(SQLiteRepository):
             ).fetchone()
         return self._inflate(row) if row else None
 
+    def update(self, order_id, **updates):
+        order = self.get(order_id)
+        if not order:
+            raise RuntimeError("order not found")
+        order.update(updates)
+        self.upsert(order)
+        return order
+
     def _inflate(self, row):
         order = load_json(row["data_json"])
         order.update(

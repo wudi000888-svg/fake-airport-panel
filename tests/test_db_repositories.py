@@ -158,3 +158,61 @@ def test_sqlite_repositories_preserve_plan_and_order_listing(tmp_path):
     assert [plan["id"] for plan in plans.list(include_disabled=False)] == ["team"]
     assert orders.list(username="alice", limit=10)[0]["id"] == "ord_new"
     assert [order["id"] for order in orders.list(limit=2)] == ["ord_new", "ord_old"]
+
+
+def test_store_facade_switches_plans_and_orders_to_sqlite(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("PANEL_DIR", str(tmp_path))
+    monkeypatch.setenv("FAKE_UI_STORE", "sqlite")
+
+    for name in ["panel_config", "db", "db_schema", "plans_store", "orders_store"]:
+        if name in sys.modules:
+            importlib.reload(sys.modules[name])
+        else:
+            importlib.import_module(name)
+
+    plans_store = sys.modules["plans_store"]
+    orders_store = sys.modules["orders_store"]
+
+    plan = plans_store.upsert_plan(
+        {
+            "id": "sqlite-plan",
+            "name": "SQLite Plan",
+            "days": 30,
+            "traffic_gb": 200,
+            "price": "12.5",
+            "enabled": True,
+        }
+    )
+    order = orders_store.create_pending_order("alice", "renew", plan, note="sqlite")
+
+    assert plans_store.get_plan("sqlite-plan")["name"] == "SQLite Plan"
+    assert orders_store.get_order(order["id"])["username"] == "alice"
+    assert (tmp_path / "fake-ui.db").exists()
+
+
+def test_export_sqlite_to_json_writes_plans_and_orders(tmp_path):
+    import importlib.util
+    import json
+
+    import db_schema
+    from repositories.sqlite_orders import SQLiteOrdersRepository
+    from repositories.sqlite_plans import SQLitePlansRepository
+
+    db_path = tmp_path / "fake-ui.db"
+    export_dir = tmp_path / "export"
+    db_schema.migrate(db_path)
+    SQLitePlansRepository(db_path).upsert({"id": "pro", "name": "Pro", "days": 30, "traffic_gb": 100, "price": "9"})
+    SQLiteOrdersRepository(db_path).upsert({"id": "ord_1", "username": "alice", "status": "pending", "created_at": "2026-01-01T00:00:00+00:00"})
+
+    script = ROOT / "scripts" / "export-sqlite-to-json.py"
+    spec = importlib.util.spec_from_file_location("export_sqlite_to_json", script)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.export_sqlite_to_json(db_path, export_dir)
+
+    plans = json.loads((export_dir / "plans.json").read_text(encoding="utf-8"))
+    orders = json.loads((export_dir / "orders.json").read_text(encoding="utf-8"))
+    assert plans["plans"][0]["id"] == "pro"
+    assert orders["orders"][0]["id"] == "ord_1"
