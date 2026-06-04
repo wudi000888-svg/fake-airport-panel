@@ -1082,3 +1082,51 @@ def test_user_cannot_save_payment_methods(payment_modules):
 
     assert status == 403
     assert payload["ok"] is False
+
+
+def test_user_cannot_manage_payment_methods_or_rates(payment_modules):
+    api = importlib.import_module("api")
+
+    status, payload = api.handle_post(
+        "/api/payment-methods/action",
+        {"id": "btc-main", "action": "disable"},
+        user_session("alice"),
+    )
+    assert status == 403
+    assert payload["ok"] is False
+
+    status, payload = api.handle_post(
+        "/api/payment-rates/save",
+        {"overrides": {"BTC": "30000"}},
+        user_session("alice"),
+    )
+    assert status == 403
+    assert payload["ok"] is False
+
+
+def test_user_cannot_create_payment_for_another_users_order(payment_modules, monkeypatch):
+    api = importlib.import_module("api")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="order not found"):
+        api.handle_post(
+            "/api/payments/create",
+            {"order_id": order["id"], "method_id": method["id"]},
+            user_session("bob"),
+        )
+
+
+def test_user_cannot_refresh_or_submit_another_users_payment(payment_modules, monkeypatch):
+    api = importlib.import_module("api")
+    payment_service = importlib.import_module("payment_service")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+
+    for path, data in (
+        ("/api/payments/refresh", {"id": payment["id"]}),
+        ("/api/payments/submit-tx", {"id": payment["id"], "txid": "0xtx"}),
+    ):
+        with pytest.raises(RuntimeError, match="payment not found"):
+            api.handle_post(path, data, user_session("bob"))
