@@ -3,8 +3,10 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 import payment_wallets
+import store_facade
 from json_store import load_json, save_json
 from panel_config import PAYMENTS_FILE
+from repositories.sqlite_payments import SQLitePaymentMethodsRepository, SQLitePaymentsRepository, SQLiteSettingsRepository
 
 
 PUBLIC_METHOD_FIELDS = {
@@ -82,14 +84,37 @@ def _find_payment(data, payment_id):
 
 
 def load_payments():
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        return {
+            "version": 2,
+            "methods": SQLitePaymentMethodsRepository().list(include_disabled=True),
+            "payments": SQLitePaymentsRepository().list(limit=100000),
+            "rates": SQLiteSettingsRepository().get("payment_rates", {"overrides": {}, "cache": {}}),
+        }
     return _ensure_shape(load_json(PAYMENTS_FILE, default_payments, create=True))
 
 
 def save_payments(data):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        methods_repo = SQLitePaymentMethodsRepository()
+        payments_repo = SQLitePaymentsRepository()
+        settings_repo = SQLiteSettingsRepository()
+        for method in _ensure_shape(data).get("methods", []):
+            methods_repo.upsert(method)
+        for payment in _ensure_shape(data).get("payments", []):
+            payments_repo.upsert(payment)
+        settings_repo.set("payment_rates", _ensure_shape(data).get("rates", {"overrides": {}, "cache": {}}))
+        return _ensure_shape(data)
     return save_json(PAYMENTS_FILE, _ensure_shape(data))
 
 
 def list_methods(admin=False):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        methods = SQLitePaymentMethodsRepository().list(include_disabled=admin)
+        return [public_method(method, admin=admin) for method in methods]
     data = load_payments()
     methods = data["methods"]
     if not admin:
@@ -98,6 +123,10 @@ def list_methods(admin=False):
 
 
 def get_method(method_id):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        method = SQLitePaymentMethodsRepository().get(method_id)
+        return deepcopy(method) if method else None
     data = load_payments()
     _, method = _find_method(data, method_id)
     if not method:
@@ -106,6 +135,18 @@ def get_method(method_id):
 
 
 def upsert_method(method):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        repo = SQLitePaymentMethodsRepository()
+        item = payment_wallets.normalize_method(method)
+        existing = repo.get(item["id"])
+        if existing and existing.get("created_at"):
+            item["created_at"] = existing["created_at"]
+        else:
+            item.setdefault("created_at", _now_iso())
+        item["updated_at"] = _now_iso()
+        return deepcopy(repo.upsert(item))
+
     data = load_payments()
     item = payment_wallets.normalize_method(method)
 
@@ -123,6 +164,9 @@ def upsert_method(method):
 
 
 def set_method_enabled(method_id, enabled):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        return deepcopy(SQLitePaymentMethodsRepository().set_enabled(method_id, enabled))
     data = load_payments()
     index, method = _find_method(data, method_id)
     if method is None:
@@ -133,6 +177,9 @@ def set_method_enabled(method_id, enabled):
 
 
 def delete_method(method_id):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        return SQLitePaymentMethodsRepository().delete(method_id)
     data = load_payments()
     original_len = len(data["methods"])
     data["methods"] = [method for method in data["methods"] if method.get("id") != method_id]
@@ -145,6 +192,10 @@ def delete_method(method_id):
 def list_payments(username=None, admin=False, limit=200):
     if not admin and username is None:
         return []
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        payments = SQLitePaymentsRepository().list(username=username, limit=limit)
+        return [public_payment(payment, admin=admin) for payment in payments]
     data = load_payments()
     payments = data["payments"]
     if username is not None:
@@ -156,6 +207,10 @@ def list_payments(username=None, admin=False, limit=200):
 
 
 def get_payment(payment_id):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        payment = SQLitePaymentsRepository().get(payment_id)
+        return deepcopy(payment) if payment else None
     data = load_payments()
     _, payment = _find_payment(data, payment_id)
     return deepcopy(payment) if payment else None
@@ -165,6 +220,9 @@ def txid_used(txid, exclude_payment_id=None):
     normalized = str(txid or "").strip().lower()
     if not normalized:
         return False
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        return SQLitePaymentsRepository().txid_used(normalized, exclude_payment_id=exclude_payment_id)
     data = load_payments()
     for payment in data["payments"]:
         if exclude_payment_id and payment.get("id") == exclude_payment_id:
@@ -176,6 +234,18 @@ def txid_used(txid, exclude_payment_id=None):
 
 
 def create_payment(payment):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        repo = SQLitePaymentsRepository()
+        item = dict(payment)
+        item.setdefault("id", _new_payment_id())
+        while repo.get(item["id"]):
+            item["id"] = _new_payment_id()
+        item.setdefault("status", DEFAULT_PAYMENT_STATUS)
+        item.setdefault("created_at", _now_iso())
+        item.setdefault("updated_at", item["created_at"])
+        return deepcopy(repo.upsert(item))
+
     data = load_payments()
     item = dict(payment)
     item.setdefault("id", _new_payment_id())
@@ -197,6 +267,11 @@ def update_payment(payment_id, **updates):
         if txid_used(normalized_txid, exclude_payment_id=payment_id):
             raise RuntimeError("txid already used")
         updates["txid"] = normalized_txid
+
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        updates["updated_at"] = _now_iso()
+        return deepcopy(SQLitePaymentsRepository().update(payment_id, **updates))
 
     data = load_payments()
     index, payment = _find_payment(data, payment_id)
@@ -221,10 +296,19 @@ def attach_txid(payment_id, txid):
 
 
 def load_rates():
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        rates = SQLiteSettingsRepository().get("payment_rates", {"overrides": {}, "cache": {}})
+        return deepcopy(_ensure_shape({"rates": rates})["rates"])
     return deepcopy(load_payments()["rates"])
 
 
 def save_rates(rates):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+        data = _ensure_shape({"rates": dict(rates or {})})
+        SQLiteSettingsRepository().set("payment_rates", data["rates"])
+        return deepcopy(data["rates"])
     data = load_payments()
     data["rates"] = dict(rates or {})
     data["rates"].setdefault("overrides", {})

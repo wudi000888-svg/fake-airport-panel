@@ -11,6 +11,7 @@ if str(BASELINE) not in sys.path:
     sys.path.insert(0, str(BASELINE))
 
 from repositories.sqlite_orders import SQLiteOrdersRepository
+from repositories.sqlite_payments import SQLitePaymentMethodsRepository, SQLitePaymentsRepository, SQLiteSettingsRepository
 from repositories.sqlite_plans import SQLitePlansRepository
 
 
@@ -24,8 +25,12 @@ def export_sqlite_to_json(db_path, data_dir):
     data_dir = Path(data_dir)
     plans = SQLitePlansRepository(db_path).list(include_disabled=True)
     orders = SQLiteOrdersRepository(db_path).list(limit=100000)
+    methods = SQLitePaymentMethodsRepository(db_path).list(include_disabled=True)
+    payments = SQLitePaymentsRepository(db_path).list(limit=100000)
+    rates = SQLiteSettingsRepository(db_path).get("payment_rates", {"overrides": {}, "cache": {}})
     write_json(data_dir / "plans.json", {"version": 1, "plans": plans})
     write_json(data_dir / "orders.json", {"version": 1, "orders": orders})
+    write_json(data_dir / "payments.json", {"version": 1, "methods": methods, "payments": payments, "rates": rates})
 
 
 def main():

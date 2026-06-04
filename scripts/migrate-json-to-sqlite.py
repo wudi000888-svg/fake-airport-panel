@@ -82,14 +82,77 @@ def migrate_orders(conn, orders):
         )
 
 
+def migrate_payment_methods(conn, methods):
+    for method in methods:
+        method_id = str(method.get("id", "")).strip()
+        if not method_id:
+            continue
+        conn.execute(
+            """
+            insert or replace into payment_methods
+            (id, asset, chain, enabled, sort_order, data_json, updated_at)
+            values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                method_id,
+                str(method.get("asset", "")),
+                str(method.get("chain", "")),
+                1 if method.get("enabled", True) else 0,
+                int(method.get("sort", 100) or 100),
+                dump_raw(method),
+                str(method.get("updated_at", "")),
+            ),
+        )
+
+
+def migrate_payments(conn, payments):
+    for payment in payments:
+        payment_id = str(payment.get("id", "")).strip()
+        if not payment_id:
+            continue
+        conn.execute(
+            """
+            insert or replace into payments
+            (id, order_id, username, status, asset, chain, txid, data_json, created_at, updated_at)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                payment_id,
+                str(payment.get("order_id", "")),
+                str(payment.get("username", "")),
+                str(payment.get("status", "")),
+                str(payment.get("asset", "")),
+                str(payment.get("chain", "")),
+                str(payment.get("txid", "")),
+                dump_raw(payment),
+                str(payment.get("created_at", "")),
+                str(payment.get("updated_at", "")),
+            ),
+        )
+
+
+def migrate_settings(conn, key, value):
+    conn.execute(
+        """
+        insert or replace into settings (key, value_json, updated_at)
+        values (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        """,
+        (key, dump_raw(value)),
+    )
+
+
 def migrate_json_to_sqlite(data_dir, db_path):
     data_dir = Path(data_dir)
     db_schema.migrate(db_path)
     plans = read_json(data_dir / "plans.json", {"plans": []}).get("plans", [])
     orders = read_json(data_dir / "orders.json", {"orders": []}).get("orders", [])
+    payments_data = read_json(data_dir / "payments.json", {"methods": [], "payments": [], "rates": {"overrides": {}, "cache": {}}})
     with db.transaction(db_path) as conn:
         migrate_plans(conn, plans)
         migrate_orders(conn, orders)
+        migrate_payment_methods(conn, payments_data.get("methods", []))
+        migrate_payments(conn, payments_data.get("payments", []))
+        migrate_settings(conn, "payment_rates", payments_data.get("rates", {"overrides": {}, "cache": {}}))
 
 
 def main():

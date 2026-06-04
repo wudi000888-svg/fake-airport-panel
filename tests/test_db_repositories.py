@@ -86,6 +86,36 @@ def test_json_to_sqlite_imports_plans_and_orders(tmp_path, monkeypatch):
         ),
         encoding="utf-8",
     )
+    (tmp_path / "payments.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "methods": [
+                    {
+                        "id": "usdt-bsc",
+                        "asset": "USDT",
+                        "chain": "bsc",
+                        "address": "0x2222222222222222222222222222222222222222",
+                        "enabled": True,
+                    }
+                ],
+                "payments": [
+                    {
+                        "id": "pay_1",
+                        "order_id": "ord_1",
+                        "username": "alice",
+                        "status": "confirmed",
+                        "asset": "USDT",
+                        "chain": "bsc",
+                        "txid": "0xabc",
+                        "created_at": "2026-01-01T00:00:00+00:00",
+                    }
+                ],
+                "rates": {"overrides": {"ETH": "3000"}, "cache": {"BTC": {"rate_usd": "90000"}}},
+            }
+        ),
+        encoding="utf-8",
+    )
 
     script = ROOT / "scripts" / "migrate-json-to-sqlite.py"
     spec = importlib.util.spec_from_file_location("migrate_json_to_sqlite", script)
@@ -98,6 +128,9 @@ def test_json_to_sqlite_imports_plans_and_orders(tmp_path, monkeypatch):
     with sqlite3.connect(db_path) as conn:
         assert conn.execute("select name from plans where id='pro'").fetchone()[0] == "Pro"
         assert conn.execute("select username from orders where id='ord_1'").fetchone()[0] == "alice"
+        assert conn.execute("select asset from payment_methods where id='usdt-bsc'").fetchone()[0] == "USDT"
+        assert conn.execute("select txid from payments where id='pay_1'").fetchone()[0] == "0xabc"
+        assert conn.execute("select value_json from settings where key='payment_rates'").fetchone()[0]
 
 
 def test_sqlite_repositories_preserve_plan_and_order_listing(tmp_path):
@@ -192,6 +225,59 @@ def test_store_facade_switches_plans_and_orders_to_sqlite(tmp_path, monkeypatch)
     assert (tmp_path / "fake-ui.db").exists()
 
 
+def test_store_facade_switches_payments_to_sqlite(tmp_path, monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("PANEL_DIR", str(tmp_path))
+    monkeypatch.setenv("FAKE_UI_STORE", "sqlite")
+
+    for name in ["panel_config", "db", "db_schema", "payments_store"]:
+        if name in sys.modules:
+            importlib.reload(sys.modules[name])
+        else:
+            importlib.import_module(name)
+
+    payments_store = sys.modules["payments_store"]
+
+    method = payments_store.upsert_method(
+        {
+            "id": "usdt-bsc",
+            "asset": "USDT",
+            "chain": "bsc",
+            "address": "0x2222222222222222222222222222222222222222",
+            "enabled": True,
+        }
+    )
+    payment = payments_store.create_payment(
+        {
+            "order_id": "ord_sqlite",
+            "username": "alice",
+            "method_id": method["id"],
+            "asset": "USDT",
+            "chain": "bsc",
+            "usd_amount": "10.00",
+            "crypto_amount": "10.000000000000000000",
+            "rate_usd": "1",
+            "address": method["address"],
+            "qr_payload": method["address"],
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+    )
+    payments_store.attach_txid(payment["id"], "0xabc")
+    payments_store.save_rates({"overrides": {"ETH": "3000"}, "cache": {"BTC": {"rate_usd": "90000"}}})
+
+    assert payments_store.get_method("usdt-bsc")["asset"] == "USDT"
+    assert payments_store.get_payment(payment["id"])["txid"] == "0xabc"
+    assert payments_store.txid_used("0XABC") is True
+    assert payments_store.load_rates()["overrides"]["ETH"] == "3000"
+    assert not (tmp_path / "payments.json").exists()
+
+    with sqlite3.connect(tmp_path / "fake-ui.db") as conn:
+        assert conn.execute("select count(*) from payment_methods").fetchone()[0] == 1
+        assert conn.execute("select count(*) from payments").fetchone()[0] == 1
+        assert conn.execute("select value_json from settings where key='payment_rates'").fetchone()[0]
+
+
 def test_database_path_uses_fake_ui_db_env(tmp_path, monkeypatch):
     import importlib
 
@@ -213,6 +299,7 @@ def test_export_sqlite_to_json_writes_plans_and_orders(tmp_path):
 
     import db_schema
     from repositories.sqlite_orders import SQLiteOrdersRepository
+    from repositories.sqlite_payments import SQLitePaymentMethodsRepository, SQLitePaymentsRepository, SQLiteSettingsRepository
     from repositories.sqlite_plans import SQLitePlansRepository
 
     db_path = tmp_path / "fake-ui.db"
@@ -220,6 +307,9 @@ def test_export_sqlite_to_json_writes_plans_and_orders(tmp_path):
     db_schema.migrate(db_path)
     SQLitePlansRepository(db_path).upsert({"id": "pro", "name": "Pro", "days": 30, "traffic_gb": 100, "price": "9"})
     SQLiteOrdersRepository(db_path).upsert({"id": "ord_1", "username": "alice", "status": "pending", "created_at": "2026-01-01T00:00:00+00:00"})
+    SQLitePaymentMethodsRepository(db_path).upsert({"id": "usdt-bsc", "asset": "USDT", "chain": "bsc", "address": "0x2222222222222222222222222222222222222222", "enabled": True})
+    SQLitePaymentsRepository(db_path).upsert({"id": "pay_1", "order_id": "ord_1", "username": "alice", "status": "confirmed", "asset": "USDT", "chain": "bsc", "txid": "0xabc", "created_at": "2026-01-01T00:00:00+00:00"})
+    SQLiteSettingsRepository(db_path).set("payment_rates", {"overrides": {"ETH": "3000"}, "cache": {}})
 
     script = ROOT / "scripts" / "export-sqlite-to-json.py"
     spec = importlib.util.spec_from_file_location("export_sqlite_to_json", script)
@@ -229,5 +319,9 @@ def test_export_sqlite_to_json_writes_plans_and_orders(tmp_path):
 
     plans = json.loads((export_dir / "plans.json").read_text(encoding="utf-8"))
     orders = json.loads((export_dir / "orders.json").read_text(encoding="utf-8"))
+    payments = json.loads((export_dir / "payments.json").read_text(encoding="utf-8"))
     assert plans["plans"][0]["id"] == "pro"
     assert orders["orders"][0]["id"] == "ord_1"
+    assert payments["methods"][0]["id"] == "usdt-bsc"
+    assert payments["payments"][0]["txid"] == "0xabc"
+    assert payments["rates"]["overrides"]["ETH"] == "3000"
