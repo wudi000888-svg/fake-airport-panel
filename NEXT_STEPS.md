@@ -17,13 +17,24 @@ This file tracks public-safe development direction. It intentionally avoids live
 
 | Version | Theme | Candidate Work |
 |---|---|---|
-| v1.1.1 | Upgrade and install polish | `UPGRADE.md`, `scripts/upgrade.sh`, stronger installer preflight report. |
-| v1.2.0 | Node orchestration | Exit quality checks, batch node refresh, per-user node visibility UX. |
-| v1.3.0 | Product experience | Dashboard polish, mobile UI improvements, clearer plan/order states. |
-| v1.4.0 | Operations | Scheduled backups, restore command, upgrade rollback helper. |
+| v1.2.1 | Upgrade and install polish | `UPGRADE.md`, `scripts/upgrade.sh`, stronger installer preflight report. |
+| v1.3.0 | Node orchestration | Exit quality checks, batch node refresh, per-user node visibility UX. |
+| v1.4.0 | Product experience | Dashboard polish, mobile UI improvements, clearer plan/order states. |
+| v1.5.0 | Operations | Scheduled backups, restore command, upgrade rollback helper. |
 | v2.0.0 | Expansion | Optional multi-server support, optional database, payment integration. |
 
-## v1.1.1 Candidate Tasks
+## Completed in v1.2.0
+
+| Area | Result |
+|---|---|
+| Crypto payments | USD-priced orders can be paid with USDT, USDC, ETH, BNB, or BTC. |
+| Admin setup | Admins can add receive-only payment methods with built-in chain defaults. |
+| Verification | EVM/BTC chain verification supports automatic scan, TXID fallback, and order activation. |
+| RPC resilience | Public RPC calls have fallback handling, EVM log scans are narrowed by payment time and split on range limits. |
+| Order UX | Pending, ambiguous, cancelled, and history states are separated in the frontend. |
+| Windows deploy | `scripts/deploy-compose-windows.ps1` packages, uploads, tests, backs up, rebuilds, and health-checks the panel. |
+
+## v1.2.1 Candidate Tasks
 
 | Priority | Task | Acceptance Criteria |
 |---|---|---|

@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, getcontext
 getcontext().prec = 78
 
 ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-HTTP_USER_AGENT = "fake-ui/1.1.2"
+HTTP_USER_AGENT = "fake-ui/1.2.0"
 
 
 def normalize_address(value):

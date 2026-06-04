@@ -7,6 +7,7 @@ This file is a public-safe handoff note for future development sessions. It keep
 | Item | Value |
 |---|---|
 | Short name | `fake-ui` |
+| Current public version | `v1.2.0` |
 | Chinese positioning | 单机多出口代理编排系统 |
 | Core idea | Use one VPS as a stable entry point, then orchestrate multiple VLESS/Hysteria2 nodes with independently controlled direct, HTTP, or SOCKS5 exits. |
 | Main pain point | Users want multiple high-quality regional exits without buying and maintaining one VPS per region. |
@@ -31,7 +32,10 @@ This file is a public-safe handoff note for future development sessions. It keep
 | Subscriptions | base64, raw URI, Mihomo/Clash.Meta. |
 | Users | Create, disable, renew, quota, expiry, reset subscription. |
 | Operations | Plans, orders, registrations, password reset requests, audit logs. |
+| Payments | USD-priced crypto payments with receive-only admin addresses, QR codes, automatic EVM/BTC verification, TXID fallback, and order activation. |
+| Payment resilience | Public RPC fallback, EVM log range splitting, payment-time scan narrowing, and minimum safe scan windows for BSC/ETH. |
 | Deployment | Docker Compose, native Nginx coexistence, SNI split, self-signed cert fallback, certificate renewal mode. |
+| Windows deploy | `scripts/deploy-compose-windows.ps1` packages local HEAD, uploads safely over SSH, runs local/remote tests, backs up, rebuilds, and checks panel health. |
 | Storage | JSON files under runtime `data/`; no database requirement. |
 
 ## Important Design Rules
@@ -65,6 +69,7 @@ Current state:
 - Each VLESS node can independently use direct, HTTP upstream, or SOCKS5 upstream exits.
 - Exit IP/country naming can be synchronized to node names and subscriptions.
 - Users, plans, orders, registrations, subscriptions, quota, expiry, audit logs, and backups exist.
+- v1.2.0 includes cryptocurrency payments: USD-priced orders, receive-only admin addresses, USDT/USDC/ETH/BNB/BTC, QR codes, automatic EVM/BTC verification, TXID fallback, and order activation after confirmation.
 - Docker Compose deployment, native Nginx coexistence, SNI split, self-signed certificate fallback, and --renew-cert are supported.
 
 Development workflow:
@@ -76,7 +81,7 @@ Development workflow:
 - Never commit live data, passwords, tokens, certificates, private keys, or proxy credentials.
 
 Recommended next version:
-v1.1.1 focused on upgrade/install polish:
+v1.2.1 focused on upgrade/install polish:
 1. UPGRADE.md
 2. scripts/upgrade.sh
 3. installer preflight report
