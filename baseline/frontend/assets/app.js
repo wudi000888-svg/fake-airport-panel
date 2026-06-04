@@ -300,6 +300,11 @@ function paymentForOrder(order) {
   return payments.find((p) => paymentId && p.id === paymentId) || payments.find((p) => p.order_id === order?.id) || null;
 }
 
+function orderForPayment(payment) {
+  const orders = state.data?.orders || [];
+  return orders.find((order) => order.id === payment?.order_id) || null;
+}
+
 function paymentMethodLabel(method) {
   if (!method) return "-";
   const chain = { ethereum: "ETH 主网", bsc: "BSC", bitcoin: "Bitcoin" }[method.chain] || method.chain || "";
@@ -324,8 +329,11 @@ function paymentMini(payment) {
   </div>`;
 }
 
-function paymentCard(payment) {
+function paymentCard(payment, adminActions = false) {
   if (!payment) return "";
+  const txidLabel = adminActions ? "补录 TXID 并校验" : "提交 TXID 兜底";
+  const refreshLabel = adminActions ? "刷新到账状态" : "我已付款，检查到账";
+  const readonly = ["confirmed", "failed", "expired"].includes(payment.status);
   return `<article class="payment-card">
     <div class="section-head">
       <div><h3>${esc(payment.asset)} 链上付款</h3><p>订单 ${esc(payment.order_id)} · ${esc(payment.chain)}</p></div>
@@ -354,10 +362,10 @@ function paymentCard(payment) {
       <form data-form="payment-submit" class="payment-submit">
         <input type="hidden" name="id" value="${esc(payment.id)}">
         <label>交易哈希 / TXID（可选）</label>
-        <input name="txid" value="${esc(payment.txid || "")}" placeholder="扫账有歧义时再粘贴交易哈希" ${["confirmed", "failed", "expired"].includes(payment.status) ? "readonly" : ""}>
+        <input name="txid" value="${esc(payment.txid || "")}" placeholder="扫账有歧义时再粘贴交易哈希" ${readonly ? "readonly" : ""}>
         <div class="actions">
-          <button class="secondary" ${state.busy || ["confirmed", "failed", "expired"].includes(payment.status) ? "disabled" : ""}>提交 TXID 兜底</button>
-          <button type="button" class="good" data-action="payment-refresh" data-payment="${esc(payment.id)}" ${state.busy ? "disabled" : ""}>我已付款，检查到账</button>
+          <button class="secondary" ${state.busy || readonly ? "disabled" : ""}>${txidLabel}</button>
+          <button type="button" class="good" data-action="payment-refresh" data-payment="${esc(payment.id)}" ${state.busy || readonly ? "disabled" : ""}>${refreshLabel}</button>
         </div>
         ${payment.error ? `<div class="notice error">${esc(payment.error)}</div>` : ""}
       </form>
@@ -365,12 +373,18 @@ function paymentCard(payment) {
   </article>`;
 }
 
-function paymentsViewBlock() {
+function paymentsViewBlock(admin = false) {
   const payments = state.data?.payments || [];
-  if (!payments.length) return "";
+  const activePayments = payments.filter((payment) => {
+    const linkedOrder = orderForPayment(payment);
+    if (linkedOrder?.status === "cancelled") return false;
+    if (linkedOrder?.status && linkedOrder.status !== "pending") return false;
+    return ["awaiting_payment", "detected", "ambiguous"].includes(payment.status);
+  });
+  if (!activePayments.length) return "";
   return `<section class="panel">
     <div class="section-head"><div><h2>链上付款记录</h2><p>系统会先按订单时间自动扫账；多笔匹配时再补 TXID。</p></div></div>
-    <div class="payment-list">${payments.slice(0, 6).map(paymentCard).join("")}</div>
+    <div class="payment-list">${activePayments.slice(0, 6).map((payment) => paymentCard(payment, admin)).join("")}</div>
   </section>`;
 }
 
@@ -456,7 +470,7 @@ function ordersView() {
   ${orderSection("待付款订单", "创建付款单后付款，付款完成可直接检查到账。", buckets.unpaid, admin)}
   ${orderSection("需要补 TXID", "同一收款地址同一时间段有多笔匹配时，补充 TXID 后可继续校验。", buckets.ambiguous, admin)}
   ${orderSection("历史订单", "已完成、已取消、已过期和校验失败的订单会归档到这里。", buckets.history, admin)}
-  ${paymentsViewBlock()}`, "订单中心");
+  ${paymentsViewBlock(admin)}`, "订单中心");
 }
 
 function nodeStatusCard(n) {

@@ -33,6 +33,24 @@ def test_frontend_cancelled_orders_do_not_show_active_payment_actions():
     assert "订单已取消" in source
 
 
+def test_frontend_admin_payment_cards_use_admin_actions():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert "function paymentCard(payment, adminActions = false)" in source
+    assert 'adminActions ? "补录 TXID 并校验" : "提交 TXID 兜底"' in source
+    assert 'adminActions ? "刷新到账状态" : "我已付款，检查到账"' in source
+    assert "paymentCard(payment, admin)" in source
+
+
+def test_frontend_payment_records_hide_cancelled_and_final_orders():
+    source = APP_JS.read_text(encoding="utf-8")
+
+    assert "function orderForPayment(payment)" in source
+    assert 'linkedOrder?.status === "cancelled"' in source
+    assert '["awaiting_payment", "detected", "ambiguous"].includes(payment.status)' in source
+    assert "activePayments" in source
+
+
 def test_frontend_exposes_crypto_payment_admin_settings():
     source = APP_JS.read_text(encoding="utf-8")
 
