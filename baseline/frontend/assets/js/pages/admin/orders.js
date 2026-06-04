@@ -9,6 +9,26 @@ function paymentForOrder(order, payments) {
 }
 
 
+function matchesOrder(order, payment, query) {
+  if (!query) return true;
+  const haystack = [
+    order.id,
+    order.username,
+    order.kind,
+    order.status,
+    order.plan_id,
+    order.plan_name,
+    order.created_at,
+    payment?.id,
+    payment?.asset,
+    payment?.chain,
+    payment?.status,
+    payment?.txid,
+  ].join(" ").toLowerCase();
+  return haystack.includes(query.toLowerCase());
+}
+
+
 function orderCard(order, payments) {
   const payment = paymentForOrder(order, payments);
   const canOperate = order.status === "pending";
@@ -33,12 +53,14 @@ function orderCard(order, payments) {
 export function renderAdminOrders(data = {}) {
   const orders = data.orders || [];
   const payments = data.payments || [];
+  const query = data.filters?.orders || "";
   const plans = (data.plans || []).filter((plan) => plan.enabled !== false);
   const planOptions = plans.map((plan) => `<option value="${esc(plan.id || "")}">${esc(plan.name || plan.id || "")} / ${money(plan.price)}</option>`).join("");
-  const active = orders.filter((order) => order.status === "pending");
-  const cancelled = orders.filter((order) => order.status === "cancelled");
-  const completed = orders.filter((order) => order.status === "completed");
-  const history = orders.filter((order) => !["pending", "cancelled", "completed"].includes(order.status));
+  const visibleOrders = orders.filter((order) => matchesOrder(order, paymentForOrder(order, payments), query));
+  const active = visibleOrders.filter((order) => order.status === "pending");
+  const cancelled = visibleOrders.filter((order) => order.status === "cancelled");
+  const completed = visibleOrders.filter((order) => order.status === "completed");
+  const history = visibleOrders.filter((order) => !["pending", "cancelled", "completed"].includes(order.status));
   return `
     <section class="screen stack">
       <div class="screen-head">
@@ -64,7 +86,7 @@ export function renderAdminOrders(data = {}) {
           <button class="primary" type="submit">创建订单</button>
         </form>
       </article>
-      <div class="toolbar"><input placeholder="搜索用户或订单"><button data-action="orders-filter" type="button">筛选</button></div>
+      <div class="toolbar"><input data-filter="orders" value="${esc(query)}" placeholder="搜索用户、订单、套餐或付款状态"><button data-action="orders-filter" type="button">筛选</button></div>
       <div class="section-row"><h2>待处理</h2><span>${active.length}</span></div>
       <div class="card-list">${active.map((order) => orderCard(order, payments)).join("") || `<article class="admin-card empty"><p>暂无待处理订单</p><button data-action="orders-refresh" type="button">刷新</button></article>`}</div>
       <div class="section-row"><h2>已完成</h2><span>${completed.length}</span></div>

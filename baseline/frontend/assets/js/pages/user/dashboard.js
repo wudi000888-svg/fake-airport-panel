@@ -2,23 +2,38 @@ import { esc } from "../../components/layout.js";
 import { empty, gb, stat, statusPill } from "../../components/ui.js";
 
 
-function nodeCards(nodes) {
+function linkForNode(node, links, index) {
+  if (node.kind === "hy2") return links.hy2 || "";
+  if (node.kind === "vless") return (links.vless_links || [])[index] || links.vless || "";
+  return "";
+}
+
+
+function nodeCards(nodes, links) {
   if (!nodes.length) return empty("暂无可用节点", "open-plans", "查看套餐");
-  return nodes.slice(0, 6).map((node) => `
+  let vlessIndex = 0;
+  return nodes.slice(0, 6).map((node) => {
+    const index = node.kind === "vless" ? vlessIndex++ : 0;
+    const nodeLink = linkForNode(node, links, index);
+    return `
     <article class="mobile-card node-summary-card">
       <div>
         <strong>${esc(node.display_name || node.name || node.id)}</strong>
         <span>${esc(node.kind || "")} · ${esc(node.location || node.country || "未标注地区")}</span>
       </div>
-      <button class="secondary" data-action="copy-node" data-node="${esc(node.id || "")}" type="button">复制</button>
+      ${nodeLink
+        ? `<button class="secondary" data-action="copy-node" data-text="${esc(nodeLink)}" type="button">复制</button>`
+        : `<button class="secondary" data-action="open-links" type="button">打开订阅</button>`}
     </article>
-  `).join("");
+  `;
+  }).join("");
 }
 
 
 export function renderUserDashboard(data = {}) {
   const profile = data.profile || {};
   const nodes = data.nodes || [];
+  const links = data.links || {};
   return `
     <section class="screen stack">
       <div class="screen-head">
@@ -41,7 +56,7 @@ export function renderUserDashboard(data = {}) {
         <button class="primary" data-action="open-links" type="button">打开订阅</button>
       </article>
       <div class="section-row"><h2>可用节点</h2><span>${nodes.length} 个</span></div>
-      <div class="card-list compact">${nodeCards(nodes)}</div>
+      <div class="card-list compact">${nodeCards(nodes, links)}</div>
     </section>
   `;
 }

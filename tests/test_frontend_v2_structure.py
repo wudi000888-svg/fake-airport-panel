@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -95,6 +96,30 @@ def test_frontend_v2_spa_wires_commercial_actions():
         "cache-clear",
     ]:
         assert action in main
+
+
+def test_frontend_v2_page_actions_are_wired_in_main_dispatcher():
+    main = read_asset("js/main.js")
+    pages_dir = ASSETS / "js" / "pages"
+    action_pattern = re.compile(r'data-action="([^"]+)"')
+    ignored = {"${esc(action)}"}
+    actions = set()
+    for path in pages_dir.rglob("*.js"):
+        actions.update(action for action in action_pattern.findall(path.read_text(encoding="utf-8")) if action not in ignored)
+
+    for action in sorted(actions):
+        assert f'button.dataset.action === "{action}"' in main or f'action === "{action}"' in main, action
+
+
+def test_frontend_v2_layout_prevents_dashboard_overflow():
+    layout_css = read_asset("css/layout.css")
+    components_css = read_asset("css/components.css")
+
+    assert "overflow-x: hidden" in layout_css
+    assert "max-width:" in layout_css
+    assert ".workspace-v2" in layout_css
+    assert "minmax(0, 1fr)" in components_css
+    assert "overflow-wrap: anywhere" in components_css
 
 
 def test_frontend_v2_admin_payment_settings_are_address_first():

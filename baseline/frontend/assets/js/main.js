@@ -77,6 +77,76 @@ function showInlineForm(selector) {
 }
 
 
+function setFilter(key) {
+  const input = app.querySelector(`[data-filter="${cssEscape(key)}"]`);
+  state.filters[key] = input?.value || "";
+}
+
+
+function openForm(selector) {
+  const el = app.querySelector(selector);
+  if (!el) return false;
+  el.hidden = false;
+  el.querySelector("input, select, button")?.focus();
+  return true;
+}
+
+
+function closeForms() {
+  app.querySelectorAll(".user-create-form, .user-edit-form, .node-edit-form").forEach((el) => {
+    el.hidden = true;
+  });
+}
+
+
+function fillForm(form, values, fields) {
+  if (!form) return;
+  fields.forEach((key) => {
+    if (form.elements[key]) form.elements[key].value = values?.[key] ?? "";
+  });
+}
+
+
+function fillNodeForm(node) {
+  openForm(".node-edit-form");
+  const form = app.querySelector('form[data-form="node-save"]');
+  fillForm(form, node || {}, [
+    "id",
+    "name",
+    "kind",
+    "group",
+    "region",
+    "multiplier",
+    "status",
+    "latency_ms",
+    "outbound_mode",
+    "sort",
+    "proxy_addr",
+    "proxy_port",
+    "proxy_user",
+  ]);
+  if (form?.elements.proxy_password) form.elements.proxy_password.value = "";
+  form?.scrollIntoView({ behavior: "smooth", block: "start" });
+  form?.elements.name?.focus();
+}
+
+
+function fillUserForm(user) {
+  openForm(".user-edit-form");
+  const form = app.querySelector('form[data-form="user-edit"]');
+  fillForm(form, {
+    username: user?.username || "",
+    action: "extend",
+    plan_id: user?.plan_id || "",
+    days: "30",
+    quota_gb: "",
+    node_ids: (user?.node_ids || []).join(","),
+  }, ["username", "action", "plan_id", "days", "quota_gb", "node_ids"]);
+  form?.scrollIntoView({ behavior: "smooth", block: "start" });
+  form?.elements.action?.focus();
+}
+
+
 function loginView() {
   return `
     <section class="login-screen">
@@ -145,10 +215,11 @@ function page() {
     if (state.route === "account") return renderUserAccount(state.data, state.shell);
     return renderUserDashboard(state.data);
   }
-  if (state.route === "orders") return renderAdminOrders(state.data);
-  if (state.route === "account" || state.route === "settings") return renderAdminSettings(state.data);
-  if (state.route === "users") return renderAdminUsers(state.data);
-  if (state.route === "nodes") return renderAdminNodes(state.data);
+  const data = { ...state.data, filters: state.filters };
+  if (state.route === "orders") return renderAdminOrders(data);
+  if (state.route === "account" || state.route === "settings") return renderAdminSettings(data);
+  if (state.route === "users") return renderAdminUsers(data);
+  if (state.route === "nodes") return renderAdminNodes(data);
   if (state.route === "plans") return adminSimplePage("套餐", "plans");
   if (state.route === "links") return adminSimplePage("订阅", "links");
   if (state.route === "requests") return adminSimplePage("申请", "registrations");
@@ -229,6 +300,30 @@ app.addEventListener("submit", async (event) => {
       });
       return;
     }
+    if (form.dataset.form === "user-create") {
+      await runAction(async () => {
+        const out = await post("/api/users/create", data);
+        form.reset();
+        return `用户已创建：${out.result.username}，密码：${out.result.panel_password}`;
+      });
+      return;
+    }
+    if (form.dataset.form === "user-edit") {
+      await runAction(async () => {
+        const payload = { ...data };
+        if (payload.action !== "set_nodes") delete payload.node_ids;
+        await post("/api/users/action", payload);
+        return "用户已保存";
+      });
+      return;
+    }
+    if (form.dataset.form === "node-save") {
+      await runAction(async () => {
+        await post("/api/nodes/save", data);
+        return "节点已保存";
+      });
+      return;
+    }
   } catch (error) {
     setNotice(error.message, "error");
   }
@@ -257,9 +352,58 @@ app.addEventListener("click", async (event) => {
       state.route = "nodes";
       history.pushState(null, "", "/nodes");
     }
-    if (button.dataset.action === "orders-refresh" || button.dataset.action === "users-filter" || button.dataset.action === "orders-filter" || button.dataset.action === "nodes-filter") {
+    if (button.dataset.action === "users-filter") {
+      setFilter("users");
+      await render();
+      return;
+    }
+    if (button.dataset.action === "nodes-filter") {
+      setFilter("nodes");
+      await render();
+      return;
+    }
+    if (button.dataset.action === "orders-filter") {
+      setFilter("orders");
+      await render();
+      return;
+    }
+    if (button.dataset.action === "orders-refresh") {
       await refresh();
       setNotice("已刷新", "success");
+    }
+    if (button.dataset.action === "user-create-sheet") {
+      closeForms();
+      openForm(".user-create-form");
+      return;
+    }
+    if (button.dataset.action === "user-form-close" || button.dataset.action === "node-form-close") {
+      closeForms();
+      return;
+    }
+    if (button.dataset.action === "user-edit") {
+      const user = (state.data.users || []).find((item) => item.username === button.dataset.user);
+      closeForms();
+      fillUserForm(user);
+      return;
+    }
+    if (button.dataset.action === "user-action") {
+      const action = button.dataset.userAction || "";
+      if (action === "delete" && !confirm(`确认删除用户 ${button.dataset.user || ""}？`)) return;
+      await runAction(async () => {
+        await post("/api/users/action", { username: button.dataset.user || "", action, days: "30" });
+        if (action === "delete") return "用户已删除";
+        if (action === "reset_traffic") return "用户流量已清零";
+        if (action === "extend") return "用户已续期";
+        return "用户已更新";
+      });
+      return;
+    }
+    if (button.dataset.action === "reset-sub") {
+      await runAction(async () => {
+        await post("/api/users/reset-subscription", { username: button.dataset.user || "" });
+        return "订阅已重置";
+      });
+      return;
     }
     if (button.dataset.action === "order-create-sheet") {
       showInlineForm(".order-create-form");
@@ -361,10 +505,27 @@ app.addEventListener("click", async (event) => {
       });
       return;
     }
+    if (button.dataset.action === "node-edit") {
+      const node = (state.data.nodes || []).find((item) => item.id === button.dataset.node);
+      closeForms();
+      fillNodeForm(node);
+      return;
+    }
     if (button.dataset.action === "node-quality-check") {
       await runAction(async () => {
         await post("/api/nodes/action", { id: button.dataset.node || "", action: "refresh" });
         return "出口质量已刷新";
+      });
+      return;
+    }
+    if (button.dataset.action === "node-action") {
+      const action = button.dataset.nodeAction || "";
+      if (action === "delete" && !confirm(`确认删除节点 ${button.dataset.node || ""}？`)) return;
+      await runAction(async () => {
+        await post("/api/nodes/action", { id: button.dataset.node || "", action });
+        if (action === "refresh") return "出口质量已刷新";
+        if (action === "delete") return "节点已删除";
+        return "节点已更新";
       });
       return;
     }

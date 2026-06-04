@@ -8,6 +8,7 @@ export const state = {
   shell: null,
   route: routeFromLocation(),
   data: {},
+  filters: {},
   busy: false,
   notice: null,
 };

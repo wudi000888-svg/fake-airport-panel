@@ -30,8 +30,10 @@ function notice() {
 
 
 export function layout(content) {
-  const nav = (state.shell?.nav || []).map(navButton).join("");
-  const secondary = (state.shell?.secondary_nav || []).map(navButton).join("");
+  const primaryItems = state.shell?.nav || [];
+  const secondaryItems = state.shell?.secondary_nav || [];
+  const nav = primaryItems.map(navButton).join("");
+  const secondary = secondaryItems.map(navButton).join("");
   const username = state.shell?.username || state.session?.username || "";
   const role = state.shell?.role === "admin" ? "管理员" : "用户";
   return `
@@ -54,7 +56,7 @@ export function layout(content) {
         </header>
         <main class="main-v2">${notice()}${content}</main>
       </div>
-      <nav class="bottom-nav" aria-label="移动端导航">${nav}</nav>
+      <nav class="bottom-nav" aria-label="移动端导航">${primaryItems.map(navButton).join("")}</nav>
     </div>
   `;
 }

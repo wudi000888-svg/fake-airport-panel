@@ -85,9 +85,9 @@ function orderCard(order, payments, methods) {
 }
 
 
-function section(title, hint, orders, payments, methods, action) {
+function section(title, hint, orders, payments, methods) {
   return `
-    <div class="section-row"><div><h2>${esc(title)}</h2><span>${esc(hint)}</span></div><button class="secondary" data-action="${esc(action)}" type="button">查看</button></div>
+    <div class="section-row"><div><h2>${esc(title)}</h2><span>${esc(hint)}</span></div><span>${orders.length}</span></div>
     <div class="card-list">${orders.map((order) => orderCard(order, payments, methods)).join("") || empty("暂无订单", "open-plans", "购买套餐")}</div>
   `;
 }
@@ -107,9 +107,9 @@ export function renderUserOrders(data = {}) {
         </div>
         <button class="primary" data-action="open-plans" type="button">新订单</button>
       </div>
-      ${section("待处理", "待付款、确认中和未完成订单", buckets.active, payments, methods, "orders-pending")}
-      ${section("需要补 TXID", "链上记录有歧义时显示在这里", buckets.ambiguous, payments, methods, "orders-ambiguous")}
-      ${section("历史订单", "已完成、已取消和过期订单", buckets.history, payments, methods, "orders-history")}
+      ${section("待处理", "待付款、确认中和未完成订单", buckets.active, payments, methods)}
+      ${section("需要补 TXID", "链上记录有歧义时显示在这里", buckets.ambiguous, payments, methods)}
+      ${section("历史订单", "已完成、已取消和过期订单", buckets.history, payments, methods)}
     </section>
   `;
 }

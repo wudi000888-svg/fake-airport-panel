@@ -8,15 +8,17 @@ html {
 
 body {
   margin: 0;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--ink);
   font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .app-shell-v2 {
+  width: 100%;
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
 }
 
 .side-nav {
@@ -57,6 +59,7 @@ body {
 }
 
 .workspace-v2 {
+  width: 100%;
   min-width: 0;
 }
 
@@ -100,7 +103,8 @@ body {
 }
 
 .main-v2 {
-  width: min(1180px, 100%);
+  width: min(1180px, calc(100vw - 240px - 44px));
+  max-width: 1180px;
   margin: 0 auto;
   padding: 22px;
 }
@@ -184,6 +188,8 @@ body {
   }
 
   .main-v2 {
+    width: 100%;
+    max-width: none;
     padding: 14px 14px 92px;
   }
 
@@ -206,8 +212,7 @@ body {
     bottom: 0;
     z-index: 30;
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));
     gap: 4px;
     padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
     background: var(--surface);
