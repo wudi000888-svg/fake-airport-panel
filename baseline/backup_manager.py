@@ -7,11 +7,12 @@ from panel_config import BACKUP_DIR, PANEL_DIR
 from json_store import save_json
 
 
-BACKUP_NAMES = [
+BACKUP_FILES = [
     "auth.json",
     "users.json",
     "plans.json",
     "orders.json",
+    "payments.json",
     "nodes.json",
     "admin_profile.json",
     "registrations.json",
@@ -20,6 +21,7 @@ BACKUP_NAMES = [
     "audit.log",
     "subscription_access.log",
 ]
+BACKUP_NAMES = BACKUP_FILES
 
 
 def now_stamp():
@@ -31,7 +33,7 @@ def create_backup(reason="manual", keep=20):
     work = BACKUP_DIR / f"panel-backup-{now_stamp()}"
     work.mkdir(parents=True, exist_ok=False)
     meta = {"reason": reason, "created_at": datetime.now(timezone.utc).isoformat(), "files": []}
-    for name in BACKUP_NAMES:
+    for name in BACKUP_FILES:
         src = PANEL_DIR / name
         if src.exists():
             dst = work / name

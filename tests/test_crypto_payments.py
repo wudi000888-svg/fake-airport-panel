@@ -1130,3 +1130,71 @@ def test_user_cannot_refresh_or_submit_another_users_payment(payment_modules, mo
     ):
         with pytest.raises(RuntimeError, match="payment not found"):
             api.handle_post(path, data, user_session("bob"))
+
+
+def test_dashboard_includes_payment_data_and_backup_includes_payments(payment_modules):
+    dashboard_service = importlib.import_module("dashboard_service")
+    backup_manager = importlib.import_module("backup_manager")
+    payments_store = importlib.import_module("payments_store")
+
+    payments_store.upsert_method(
+        {
+            "id": "btc-main",
+            "asset": "BTC",
+            "chain": "bitcoin",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+            "btc_api_url": "https://blockstream.info/api",
+            "confirmations_required": "3",
+        }
+    )
+    user_payload = dashboard_service.dashboard({"u": "alice", "r": "user", "role": "user"})
+    assert "payment_methods" in user_payload
+    assert user_payload["payment_methods"][0]["id"] == "btc-main"
+    assert "payments" in user_payload
+    assert "payments.json" in backup_manager.BACKUP_FILES
+
+
+def test_admin_dashboard_includes_payment_methods_payments_and_rates(payment_modules, monkeypatch):
+    dashboard_service = importlib.import_module("dashboard_service")
+    payments_store = importlib.import_module("payments_store")
+
+    monkeypatch.setattr(dashboard_service.xray_panel, "current_status", lambda: {"proxy": "127.0.0.1:1080"})
+    monkeypatch.setattr(dashboard_service.hy2_panel, "hy2_status", lambda: {})
+    monkeypatch.setattr(dashboard_service, "admin_links", lambda: {})
+    payments_store.upsert_method(
+        {
+            "id": "btc-main",
+            "asset": "BTC",
+            "chain": "bitcoin",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+            "btc_api_url": "https://blockstream.info/api",
+            "confirmations_required": "3",
+        }
+    )
+    payments_store.save_rates({"overrides": {"BTC": "30000"}, "cache": {}})
+
+    admin_payload = dashboard_service.dashboard({"u": "admin", "r": "admin", "role": "admin"})
+
+    assert admin_payload["payment_methods"][0]["id"] == "btc-main"
+    assert "payments" in admin_payload
+    assert admin_payload["payment_rates"]["overrides"]["BTC"] == "30000"
+
+
+def test_user_dashboard_payment_methods_do_not_leak_btc_api_url(payment_modules):
+    dashboard_service = importlib.import_module("dashboard_service")
+    payments_store = importlib.import_module("payments_store")
+
+    payments_store.upsert_method(
+        {
+            "id": "btc-main",
+            "asset": "BTC",
+            "chain": "bitcoin",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+            "btc_api_url": "https://blockstream.info/api",
+            "confirmations_required": "3",
+        }
+    )
+
+    user_payload = dashboard_service.dashboard({"u": "alice", "r": "user", "role": "user"})
+
+    assert "btc_api_url" not in user_payload["payment_methods"][0]

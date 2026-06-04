@@ -9,6 +9,7 @@ import hy2_panel
 import links
 import node_catalog
 import orders_store
+import payments_store
 import plans_store
 import registration_store
 import subscription_guard
@@ -170,6 +171,9 @@ def dashboard(session):
                 "users": list_users(),
                 "plans": plans_store.list_plans(),
                 "orders": orders_store.list_orders(limit=80),
+                "payment_methods": payments_store.list_methods(admin=True),
+                "payments": payments_store.list_payments(admin=True, limit=80),
+                "payment_rates": payments_store.load_rates(),
                 "nodes": node_catalog.list_public_nodes(admin=True),
                 "audit": audit_log.tail(80),
                 "backups": backup_manager.list_backups(20),
@@ -188,4 +192,6 @@ def dashboard(session):
         payload["orders"] = orders_store.list_orders(username=username, limit=30)
         payload["plans"] = plans_store.list_plans(include_disabled=False)
         payload["nodes"] = visible_nodes_for_user(user) if user else []
+        payload["payment_methods"] = payments_store.list_methods(admin=False)
+        payload["payments"] = payments_store.list_payments(username=username, admin=False, limit=30)
     return payload
