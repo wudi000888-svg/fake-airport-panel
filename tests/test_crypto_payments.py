@@ -12,9 +12,22 @@ if str(BASELINE) not in sys.path:
 
 
 MODULES = [
+    "auth_store",
+    "user_store",
+    "node_catalog",
+    "plans_store",
+    "orders_store",
+    "audit_log",
+    "admin_profile",
+    "operations_service",
+    "user_admin",
     "panel_config",
     "json_store",
     "payments_store",
+    "payment_rates",
+    "payment_wallets",
+    "payment_verifier",
+    "payment_service",
 ]
 
 
@@ -725,3 +738,124 @@ def test_rpc_call_sanitizes_json_rpc_error(monkeypatch, payment_modules):
     error = str(excinfo.value)
     assert error == long_message[:200]
     assert "secret" not in error
+
+
+def create_standard_order_and_method(monkeypatch):
+    plans_store = importlib.import_module("plans_store")
+    orders_store = importlib.import_module("orders_store")
+    payments_store = importlib.import_module("payments_store")
+    user_admin = importlib.import_module("user_admin")
+
+    monkeypatch.setattr(user_admin, "enforce_users_now", lambda: "ok")
+    plan = plans_store.upsert_plan(
+        {"id": "standard", "name": "Standard", "days": "30", "traffic_gb": "100", "price": "39"}
+    )
+    order = orders_store.create_pending_order("alice", "renew", plan, operator="alice")
+    method = payments_store.upsert_method(
+        {
+            "id": "usdt-eth",
+            "asset": "USDT",
+            "chain": "ethereum",
+            "address": "0x2222222222222222222222222222222222222222",
+            "token_contract": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+            "decimals": "6",
+            "rpc_url": "https://rpc.example",
+            "confirmations_required": "12",
+            "enabled": True,
+        }
+    )
+    return order, method
+
+
+def test_confirmed_payment_completes_order(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payments_store = importlib.import_module("payments_store")
+    payment_service = importlib.import_module("payment_service")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    assert payment["crypto_amount"] == "39.000000"
+    assert orders_store.get_order(order["id"])["payment_status"] == "awaiting_payment"
+    assert payments_store.get_payment(payment["id"])["qr_payload"] == method["address"]
+
+    monkeypatch.setattr(
+        payment_service,
+        "verify_payment",
+        lambda p, m: {"status": "confirmed", "detected_amount": p["crypto_amount"], "confirmations": 12, "error": ""},
+    )
+    done = payment_service.submit_tx_and_verify(payment["id"], "0xtx", "alice")
+    assert done["status"] == "confirmed"
+    assert orders_store.get_order(order["id"])["status"] == "completed"
+
+
+def test_create_payment_rejects_non_owner_and_disabled_method(payment_modules, monkeypatch):
+    payments_store = importlib.import_module("payments_store")
+    payment_service = importlib.import_module("payment_service")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    with pytest.raises(RuntimeError, match="order not found"):
+        payment_service.create_payment_for_order(order["id"], method["id"], "bob")
+
+    payments_store.set_method_enabled(method["id"], False)
+    with pytest.raises(RuntimeError, match="payment method not available"):
+        payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+
+
+def test_payment_refresh_and_submit_hide_non_owner_payments(payment_modules, monkeypatch):
+    payment_service = importlib.import_module("payment_service")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+
+    with pytest.raises(RuntimeError, match="payment not found"):
+        payment_service.refresh_payment(payment["id"], "bob")
+
+    with pytest.raises(RuntimeError, match="payment not found"):
+        payment_service.submit_tx_and_verify(payment["id"], "0xtx", "bob")
+
+
+def test_confirmed_payment_refresh_is_idempotent(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payment_service = importlib.import_module("payment_service")
+    user_admin = importlib.import_module("user_admin")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    monkeypatch.setattr(
+        payment_service,
+        "verify_payment",
+        lambda p, m: {"status": "confirmed", "detected_amount": p["crypto_amount"], "confirmations": 12, "error": ""},
+    )
+    payment_service.submit_tx_and_verify(payment["id"], "0xtx", "alice")
+
+    def fail_confirm(order_id, operator="admin"):
+        raise AssertionError("confirm_order should not be called again")
+
+    monkeypatch.setattr(user_admin, "confirm_order", fail_confirm)
+    refreshed = payment_service.refresh_payment(payment["id"], "alice")
+    assert refreshed["status"] == "confirmed"
+    assert orders_store.get_order(order["id"])["status"] == "completed"
+
+
+def test_detected_payment_keeps_order_pending(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payment_service = importlib.import_module("payment_service")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    monkeypatch.setattr(
+        payment_service,
+        "verify_payment",
+        lambda p, m: {
+            "status": "detected",
+            "detected_amount": p["crypto_amount"],
+            "confirmations": 3,
+            "error": "confirmations below required amount",
+        },
+    )
+
+    detected = payment_service.submit_tx_and_verify(payment["id"], "0xtx", "alice")
+    order_after = orders_store.get_order(order["id"])
+    assert detected["status"] == "detected"
+    assert order_after["status"] == "pending"
+    assert order_after["payment_status"] == "detected"
