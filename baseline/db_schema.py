@@ -24,9 +24,14 @@ DDL = [
     """
     create table if not exists plans (
         id text primary key,
+        name text not null default '',
+        days integer not null default 0,
+        traffic_gb real not null default 0,
+        price text not null default '0',
         data_json text not null,
         enabled integer not null default 1,
         sort_order integer not null default 100,
+        created_at text not null default '',
         updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     )
     """,
@@ -37,6 +42,12 @@ DDL = [
         status text not null,
         kind text not null default '',
         plan_id text not null default '',
+        plan_name text not null default '',
+        amount text not null default '0',
+        days integer not null default 0,
+        traffic_gb real not null default 0,
+        payment_status text not null default '',
+        payment_id text not null default '',
         data_json text not null,
         created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
         updated_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
