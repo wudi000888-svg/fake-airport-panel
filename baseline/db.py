@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
@@ -8,6 +9,9 @@ import panel_config
 def database_path(path=None):
     if path is not None:
         return Path(path)
+    configured = os.getenv("FAKE_UI_DB", "").strip()
+    if configured:
+        return Path(configured)
     return Path(panel_config.PANEL_DIR) / "fake-ui.db"
 
 

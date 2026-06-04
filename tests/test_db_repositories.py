@@ -192,6 +192,21 @@ def test_store_facade_switches_plans_and_orders_to_sqlite(tmp_path, monkeypatch)
     assert (tmp_path / "fake-ui.db").exists()
 
 
+def test_database_path_uses_fake_ui_db_env(tmp_path, monkeypatch):
+    import importlib
+
+    custom_db = tmp_path / "custom" / "fake-ui.sqlite"
+    monkeypatch.setenv("FAKE_UI_DB", str(custom_db))
+
+    if "db" in sys.modules:
+        importlib.reload(sys.modules["db"])
+    else:
+        importlib.import_module("db")
+
+    db = sys.modules["db"]
+    assert db.database_path() == custom_db
+
+
 def test_export_sqlite_to_json_writes_plans_and_orders(tmp_path):
     import importlib.util
     import json
