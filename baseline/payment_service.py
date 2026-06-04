@@ -15,6 +15,7 @@ FINAL_PAYMENT_STATUSES = {"confirmed", "failed", "expired"}
 SECRET_QUERY_RE = re.compile(r"(?i)([?&](?:key|token|apikey|api_key)=)([^&\s]+)")
 EVM_SCAN_BLOCK_LOOKBACK = 200000
 EVM_SCAN_MAX_BLOCK_RANGE = 50000
+EVM_CHAIN_BLOCK_SECONDS = {"bsc": 3, "ethereum": 12}
 PAYMENT_TIME_SKEW_SECONDS = 60
 PAYMENT_RECOVERY_DAYS = 7
 
@@ -96,6 +97,25 @@ def _created_at_floor(payment):
     if not created_at:
         return None
     return created_at - timedelta(seconds=PAYMENT_TIME_SKEW_SECONDS)
+
+
+def _scan_from_block(payment, method, current_block):
+    lookback = int(method.get("scan_block_lookback") or EVM_SCAN_BLOCK_LOOKBACK)
+    fallback_from_block = max(0, current_block - lookback)
+    floor = _created_at_floor(payment)
+    if not floor:
+        return fallback_from_block
+    try:
+        current_time = _block_timestamp(method, current_block)
+    except Exception:
+        current_time = None
+    if not current_time:
+        return fallback_from_block
+    seconds = max(0, int((current_time - floor).total_seconds()))
+    chain = str(method.get("chain") or "").strip().lower()
+    block_seconds = EVM_CHAIN_BLOCK_SECONDS.get(chain, 6)
+    estimated_blocks = max(1, (seconds // block_seconds) + 20)
+    return max(fallback_from_block, current_block - estimated_blocks)
 
 
 def _payment_expired(payment):
@@ -192,8 +212,7 @@ def _scan_evm_erc20_payment(payment, method):
         payment_verifier.rpc_call(_rpc_urls(method), "eth_blockNumber", []),
         "blockNumber",
     )
-    lookback = int(method.get("scan_block_lookback") or EVM_SCAN_BLOCK_LOOKBACK)
-    from_block = max(0, current_block - lookback)
+    from_block = _scan_from_block(payment, method, current_block)
     logs = _scan_evm_logs(method, from_block, current_block)
     floor = _created_at_floor(payment)
     grouped = {}

@@ -1139,6 +1139,58 @@ def test_refresh_without_txid_keeps_splitting_erc20_log_scan_until_rpc_accepts(p
     assert any(end - start <= 25000 for start, end in log_ranges)
 
 
+def test_refresh_without_txid_limits_erc20_scan_to_payment_created_time(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payment_service = importlib.import_module("payment_service")
+    payment_verifier = importlib.import_module("payment_verifier")
+    payments_store = importlib.import_module("payments_store")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    payment = payments_store.update_payment(payment["id"], created_at="2099-12-31T23:55:00+00:00")
+    tx_hash = "0x" + "d" * 64
+    tx_block = 199950
+    amount_units = 39000000
+    log_ranges = []
+
+    def fake_rpc(urls, rpc_method, params):
+        if rpc_method == "eth_blockNumber":
+            return "0x30d40"
+        if rpc_method == "eth_getLogs":
+            query = params[0]
+            start = int(query["fromBlock"], 16)
+            end = int(query["toBlock"], 16)
+            log_ranges.append((start, end))
+            assert start > 190000
+            if start <= tx_block <= end:
+                return [
+                    {
+                        "transactionHash": tx_hash,
+                        "blockNumber": hex(tx_block),
+                        "address": method["token_contract"],
+                        "topics": [
+                            payment_verifier.ERC20_TRANSFER_TOPIC,
+                            pad_topic_address("0x1111111111111111111111111111111111111111"),
+                            pad_topic_address(method["address"]),
+                        ],
+                        "data": "0x" + format(amount_units, "064x"),
+                    }
+                ]
+            return []
+        if rpc_method == "eth_getBlockByNumber":
+            return {"timestamp": hex(4102444800)}
+        raise AssertionError(rpc_method)
+
+    monkeypatch.setattr(payment_verifier, "rpc_call", fake_rpc)
+
+    refreshed = payment_service.refresh_payment(payment["id"], "alice")
+
+    assert refreshed["status"] == "confirmed"
+    assert refreshed["txid"] == tx_hash
+    assert orders_store.get_order(order["id"])["status"] == "completed"
+    assert log_ranges[0][0] > 190000
+
+
 def test_refresh_without_txid_marks_ambiguous_when_multiple_matching_transfers(payment_modules, monkeypatch):
     orders_store = importlib.import_module("orders_store")
     payment_service = importlib.import_module("payment_service")
