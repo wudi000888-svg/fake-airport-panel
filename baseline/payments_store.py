@@ -6,7 +6,19 @@ from json_store import load_json, save_json
 from panel_config import PAYMENTS_FILE
 
 
-SECRET_METHOD_FIELDS = {"rpc_url", "btc_api_url", "token_contract"}
+PUBLIC_METHOD_FIELDS = {
+    "id",
+    "label",
+    "asset",
+    "chain",
+    "address",
+    "decimals",
+    "confirmations_required",
+    "enabled",
+    "sort",
+    "created_at",
+    "updated_at",
+}
 SECRET_PAYMENT_FIELDS = {"internal_note"}
 DEFAULT_PAYMENT_STATUS = "awaiting_payment"
 
@@ -35,7 +47,7 @@ def _ensure_shape(data):
 def public_method(method, admin=False):
     view = deepcopy(method)
     if not admin:
-        view = {k: v for k, v in view.items() if k not in SECRET_METHOD_FIELDS}
+        view = {k: v for k, v in view.items() if k in PUBLIC_METHOD_FIELDS}
     return view
 
 
@@ -131,10 +143,13 @@ def delete_method(method_id):
 
 
 def list_payments(username=None, admin=False, limit=200):
+    if not admin and username is None:
+        return []
     data = load_payments()
     payments = data["payments"]
     if username is not None:
         payments = [payment for payment in payments if payment.get("username") == username]
+    payments = sorted(payments, key=lambda payment: payment.get("created_at", ""), reverse=True)
     if limit is not None:
         payments = payments[: int(limit)]
     return [public_payment(payment, admin=admin) for payment in payments]
@@ -175,6 +190,14 @@ def create_payment(payment):
 
 
 def update_payment(payment_id, **updates):
+    if "txid" in updates:
+        normalized_txid = str(updates.get("txid") or "").strip()
+        if not normalized_txid:
+            raise RuntimeError("txid required")
+        if txid_used(normalized_txid, exclude_payment_id=payment_id):
+            raise RuntimeError("txid already used")
+        updates["txid"] = normalized_txid
+
     data = load_payments()
     index, payment = _find_payment(data, payment_id)
     if payment is None:

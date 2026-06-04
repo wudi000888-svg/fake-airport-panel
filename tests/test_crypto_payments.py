@@ -106,10 +106,14 @@ def test_payment_public_helpers_update_kwargs_and_list_limit(payment_modules):
         "chain": "bitcoin",
         "address": "bc1qexample",
         "btc_api_url": "https://btc-api.example",
+        "api_key": "example-api-key",
         "enabled": True,
     }
     assert "btc_api_url" in store.public_method(method, admin=True)
     assert "btc_api_url" not in store.public_method(method, admin=False)
+    assert "api_key" not in store.public_method(method, admin=False)
+    store.upsert_method(method)
+    assert "api_key" not in store.list_methods(admin=False)[0]
 
     first = store.create_payment(
         {
@@ -124,6 +128,7 @@ def test_payment_public_helpers_update_kwargs_and_list_limit(payment_modules):
             "address": "bc1qexample",
             "qr_payload": "bitcoin:bc1qexample?amount=0.00039000",
             "expires_at": "2099-01-01T00:00:00+00:00",
+            "created_at": "2026-01-01T00:00:00+00:00",
         }
     )
     second = store.create_payment(
@@ -139,6 +144,7 @@ def test_payment_public_helpers_update_kwargs_and_list_limit(payment_modules):
             "address": "bc1qexample",
             "qr_payload": "bitcoin:bc1qexample?amount=0.00049000",
             "expires_at": "2099-01-01T00:00:00+00:00",
+            "created_at": "2026-01-02T00:00:00+00:00",
         }
     )
 
@@ -152,12 +158,17 @@ def test_payment_public_helpers_update_kwargs_and_list_limit(payment_modules):
     assert updated["detected_amount"] == "0.00039000"
     assert store.public_payment(updated, admin=True)["internal_note"] == "manual review"
     assert "internal_note" not in store.public_payment(updated, admin=False)
+    assert store.list_payments(admin=False, username=None) == []
 
     public_items = store.list_payments(username="alice", admin=False, limit=1)
     assert len(public_items) == 1
-    assert public_items[0]["id"] == first["id"]
+    assert public_items[0]["id"] == second["id"]
     assert "internal_note" not in public_items[0]
 
     admin_items = store.list_payments(username="alice", admin=True, limit=2)
-    assert [item["id"] for item in admin_items] == [first["id"], second["id"]]
-    assert admin_items[0]["internal_note"] == "manual review"
+    assert [item["id"] for item in admin_items] == [second["id"], first["id"]]
+    assert admin_items[1]["internal_note"] == "manual review"
+
+    store.update_payment(first["id"], txid="tx123")
+    with pytest.raises(RuntimeError, match="txid already used"):
+        store.update_payment(second["id"], txid="TX123")
