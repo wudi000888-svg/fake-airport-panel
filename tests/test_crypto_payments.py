@@ -837,6 +837,35 @@ def test_rpc_call_falls_back_to_next_public_endpoint(monkeypatch, payment_module
     assert seen_urls == ["https://blocked.example", "https://ok.example"]
 
 
+def test_rpc_call_falls_back_on_public_limit_json_rpc_error(monkeypatch, payment_modules):
+    verifier = importlib.import_module("payment_verifier")
+    seen_urls = []
+
+    class FakeResponse:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return self.body
+
+    def fake_urlopen(request, timeout):
+        seen_urls.append(request.full_url)
+        if len(seen_urls) == 1:
+            return FakeResponse(json.dumps({"error": {"message": "limit exceeded"}}).encode("utf-8"))
+        return FakeResponse(json.dumps({"result": "0x2b"}).encode("utf-8"))
+
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", fake_urlopen)
+
+    assert verifier.rpc_call(["https://limited.example", "https://ok.example"], "eth_getLogs", []) == "0x2b"
+    assert seen_urls == ["https://limited.example", "https://ok.example"]
+
+
 def create_standard_order_and_method(monkeypatch):
     plans_store = importlib.import_module("plans_store")
     orders_store = importlib.import_module("orders_store")
@@ -1005,6 +1034,58 @@ def test_refresh_without_txid_scans_erc20_transfer_and_completes_order(payment_m
     assert orders_store.get_order(order["id"])["status"] == "completed"
     assert payments_store.txid_used(tx_hash)
     assert any(item[0] == "eth_getLogs" for item in scanned)
+
+
+def test_refresh_without_txid_splits_erc20_log_scan_when_public_rpc_limits_range(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payment_service = importlib.import_module("payment_service")
+    payment_verifier = importlib.import_module("payment_verifier")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    block_number = 199900
+    tx_hash = "0x" + "b" * 64
+    amount_units = 39000000
+    log_ranges = []
+
+    def fake_rpc(urls, rpc_method, params):
+        if rpc_method == "eth_blockNumber":
+            return "0x30d40"
+        if rpc_method == "eth_getLogs":
+            query = params[0]
+            start = int(query["fromBlock"], 16)
+            end = int(query["toBlock"], 16)
+            log_ranges.append((start, end))
+            if end - start > 50000:
+                raise RuntimeError("limit exceeded")
+            if start <= block_number <= end:
+                return [
+                    {
+                        "transactionHash": tx_hash,
+                        "blockNumber": hex(block_number),
+                        "address": method["token_contract"],
+                        "topics": [
+                            payment_verifier.ERC20_TRANSFER_TOPIC,
+                            pad_topic_address("0x1111111111111111111111111111111111111111"),
+                            pad_topic_address(method["address"]),
+                        ],
+                        "data": "0x" + format(amount_units, "064x"),
+                    }
+                ]
+            return []
+        if rpc_method == "eth_getBlockByNumber":
+            return {"timestamp": hex(4102444800)}
+        raise AssertionError(rpc_method)
+
+    monkeypatch.setattr(payment_verifier, "rpc_call", fake_rpc)
+
+    refreshed = payment_service.refresh_payment(payment["id"], "alice")
+
+    assert refreshed["status"] == "confirmed"
+    assert refreshed["txid"] == tx_hash
+    assert orders_store.get_order(order["id"])["status"] == "completed"
+    assert log_ranges[0] == (0, 200000)
+    assert any(end - start <= 50000 for start, end in log_ranges[1:])
 
 
 def test_refresh_without_txid_marks_ambiguous_when_multiple_matching_transfers(payment_modules, monkeypatch):

@@ -14,6 +14,7 @@ PAYMENT_TTL_HOURS = 2
 FINAL_PAYMENT_STATUSES = {"confirmed", "failed", "expired"}
 SECRET_QUERY_RE = re.compile(r"(?i)([?&](?:key|token|apikey|api_key)=)([^&\s]+)")
 EVM_SCAN_BLOCK_LOOKBACK = 200000
+EVM_SCAN_MAX_BLOCK_RANGE = 50000
 PAYMENT_TIME_SKEW_SECONDS = 60
 PAYMENT_RECOVERY_DAYS = 7
 
@@ -125,6 +126,52 @@ def _confirmed_status(amount, required_amount, confirmations, confirmations_requ
     return "confirmed"
 
 
+def _evm_log_query(method, from_block, to_block):
+    return {
+        "fromBlock": hex(from_block),
+        "toBlock": hex(to_block),
+        "address": method.get("token_contract"),
+        "topics": [
+            payment_verifier.ERC20_TRANSFER_TOPIC,
+            None,
+            _address_topic(method.get("address")),
+        ],
+    }
+
+
+def _is_evm_log_range_error(error):
+    text = str(error or "").lower()
+    return any(
+        token in text
+        for token in (
+            "limit exceeded",
+            "block range",
+            "range too",
+            "too many",
+            "query timeout",
+            "response size",
+            "more than",
+        )
+    )
+
+
+def _scan_evm_logs(method, from_block, to_block):
+    urls = _rpc_urls(method)
+    try:
+        return payment_verifier.rpc_call(urls, "eth_getLogs", [_evm_log_query(method, from_block, to_block)])
+    except Exception as exc:
+        if not _is_evm_log_range_error(exc) or to_block - from_block <= EVM_SCAN_MAX_BLOCK_RANGE:
+            raise
+        logs = []
+        start = from_block
+        while start <= to_block:
+            end = min(to_block, start + EVM_SCAN_MAX_BLOCK_RANGE)
+            chunk = payment_verifier.rpc_call(urls, "eth_getLogs", [_evm_log_query(method, start, end)])
+            logs.extend(chunk or [])
+            start = end + 1
+        return logs
+
+
 def _scan_evm_erc20_payment(payment, method):
     required_amount = payment.get("crypto_amount")
     decimals = method.get("decimals", 8)
@@ -135,22 +182,7 @@ def _scan_evm_erc20_payment(payment, method):
     )
     lookback = int(method.get("scan_block_lookback") or EVM_SCAN_BLOCK_LOOKBACK)
     from_block = max(0, current_block - lookback)
-    logs = payment_verifier.rpc_call(
-        _rpc_urls(method),
-        "eth_getLogs",
-        [
-            {
-                "fromBlock": hex(from_block),
-                "toBlock": "latest",
-                "address": method.get("token_contract"),
-                "topics": [
-                    payment_verifier.ERC20_TRANSFER_TOPIC,
-                    None,
-                    _address_topic(method.get("address")),
-                ],
-            }
-        ],
-    )
+    logs = _scan_evm_logs(method, from_block, current_block)
     floor = _created_at_floor(payment)
     grouped = {}
     for raw_log in logs or []:
