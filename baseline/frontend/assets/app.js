@@ -71,7 +71,7 @@ function nav() {
   return `<div class="nav">${items.map(([id, label]) => `<button type="button" class="${state.view === id ? "active" : ""}" data-nav="${id}">${label}</button>`).join("")}<button type="button" data-action="logout">退出</button></div>`;
 }
 
-function shell(content, title = "fake-ui", subtitle = "") {
+function shell(content, title = "单机多出口代理编排系统", subtitle = "") {
   app.innerHTML = `
     <div class="shell">
       <header class="topbar">
@@ -473,7 +473,7 @@ function render() {
 }
 
 function renderLogin(error = "") {
-  app.innerHTML = `<div class="login-wrap"><section class="panel login-card"><div class="mark">IP</div><h2>fake-ui</h2><p>单 VPS 多出口节点编排面板。</p>${error ? `<div class="notice error">${esc(error)}</div>` : ""}<form data-form="login"><label for="login-username">账号</label><input id="login-username" name="username" autocomplete="username" required autofocus><label for="login-password">密码</label><input id="login-password" name="password" type="password" autocomplete="current-password" required><button class="good">登录</button></form><div class="actions"><button type="button" class="secondary" data-nav="register">注册</button><button type="button" class="secondary" data-nav="forgot">找回密码</button></div></section></div>`;
+  app.innerHTML = `<div class="login-wrap"><section class="panel login-card"><div class="mark">IP</div><h2>单机多出口代理编排系统</h2><p>用一台 VPS 统一管理多个可独立控制出口的代理节点。</p>${error ? `<div class="notice error">${esc(error)}</div>` : ""}<form data-form="login"><label for="login-username">账号</label><input id="login-username" name="username" autocomplete="username" required autofocus><label for="login-password">密码</label><input id="login-password" name="password" type="password" autocomplete="current-password" required><button class="good">登录</button></form><div class="actions"><button type="button" class="secondary" data-nav="register">注册</button><button type="button" class="secondary" data-nav="forgot">找回密码</button></div></section></div>`;
 }
 
 async function copyText(text) {
