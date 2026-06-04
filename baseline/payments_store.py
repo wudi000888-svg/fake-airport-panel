@@ -7,6 +7,7 @@ from panel_config import PAYMENTS_FILE
 
 
 SECRET_METHOD_FIELDS = {"rpc_url", "btc_api_url", "token_contract"}
+SECRET_PAYMENT_FIELDS = {"internal_note"}
 DEFAULT_PAYMENT_STATUS = "awaiting_payment"
 
 
@@ -31,14 +32,17 @@ def _ensure_shape(data):
     return data
 
 
-def _public_method(method):
-    return {k: v for k, v in method.items() if k not in SECRET_METHOD_FIELDS}
-
-
-def _method_view(method, admin=False):
+def public_method(method, admin=False):
     view = deepcopy(method)
     if not admin:
-        view = _public_method(view)
+        view = {k: v for k, v in view.items() if k not in SECRET_METHOD_FIELDS}
+    return view
+
+
+def public_payment(payment, admin=False):
+    view = deepcopy(payment)
+    if not admin:
+        view = {k: v for k, v in view.items() if k not in SECRET_PAYMENT_FIELDS}
     return view
 
 
@@ -77,17 +81,15 @@ def list_methods(admin=False):
     methods = data["methods"]
     if not admin:
         methods = [method for method in methods if method.get("enabled")]
-    return [_method_view(method, admin=admin) for method in methods]
+    return [public_method(method, admin=admin) for method in methods]
 
 
-def get_method(method_id, admin=False):
+def get_method(method_id):
     data = load_payments()
     _, method = _find_method(data, method_id)
     if not method:
         return None
-    if not admin and not method.get("enabled"):
-        return None
-    return _method_view(method, admin=admin)
+    return deepcopy(method)
 
 
 def upsert_method(method):
@@ -128,12 +130,14 @@ def delete_method(method_id):
     return True
 
 
-def list_payments(username=None):
+def list_payments(username=None, admin=False, limit=200):
     data = load_payments()
     payments = data["payments"]
     if username is not None:
         payments = [payment for payment in payments if payment.get("username") == username]
-    return [deepcopy(payment) for payment in payments]
+    if limit is not None:
+        payments = payments[: int(limit)]
+    return [public_payment(payment, admin=admin) for payment in payments]
 
 
 def get_payment(payment_id):
@@ -170,13 +174,13 @@ def create_payment(payment):
     return deepcopy(item)
 
 
-def update_payment(payment_id, changes):
+def update_payment(payment_id, **updates):
     data = load_payments()
     index, payment = _find_payment(data, payment_id)
     if payment is None:
         raise RuntimeError("payment not found")
     updated = dict(payment)
-    updated.update(dict(changes))
+    updated.update(dict(updates))
     updated["id"] = payment_id
     updated["updated_at"] = _now_iso()
     data["payments"][index] = updated
@@ -190,7 +194,7 @@ def attach_txid(payment_id, txid):
         raise RuntimeError("txid required")
     if txid_used(normalized, exclude_payment_id=payment_id):
         raise RuntimeError("txid already used")
-    return update_payment(payment_id, {"txid": normalized})
+    return update_payment(payment_id, txid=normalized)
 
 
 def load_rates():
