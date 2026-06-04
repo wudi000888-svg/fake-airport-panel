@@ -1198,3 +1198,59 @@ def test_user_dashboard_payment_methods_do_not_leak_btc_api_url(payment_modules)
     user_payload = dashboard_service.dashboard({"u": "alice", "r": "user", "role": "user"})
 
     assert "btc_api_url" not in user_payload["payment_methods"][0]
+
+
+def test_payment_qr_route_checks_ownership(payment_modules):
+    http_qr_routes = importlib.import_module("http_qr_routes")
+    payments_store = importlib.import_module("payments_store")
+
+    payment = payments_store.create_payment(
+        {
+            "order_id": "ord_1",
+            "username": "alice",
+            "method_id": "btc-main",
+            "asset": "BTC",
+            "chain": "bitcoin",
+            "crypto_amount": "0.00039000",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+            "qr_payload": "bitcoin:bc1qqqqqqqqqqqqqqqqqqqq?amount=0.00039000",
+        }
+    )
+
+    class Handler:
+        path = f"/payqr/{payment['id']}"
+        status = None
+        content_type = None
+        body = None
+
+        def __init__(self, username, role="user"):
+            self.username = username
+            self.role = role
+
+        def current_role(self):
+            return self.role
+
+        def current_username(self):
+            return self.username
+
+        def forbidden(self):
+            self.status = 403
+
+        def respond_bytes(self, body, content_type):
+            self.status = 200
+            self.body = body
+            self.content_type = content_type
+
+        def respond_text(self, text, status=200):
+            self.status = status
+            self.body = text
+
+    owner = Handler("alice")
+    http_qr_routes.handle_payment_qr(owner)
+    assert owner.status == 200
+    assert owner.content_type == "image/png"
+    assert owner.body.startswith(b"\x89PNG\r\n\x1a\n")
+
+    other = Handler("bob")
+    http_qr_routes.handle_payment_qr(other)
+    assert other.status == 403

@@ -146,6 +146,10 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
             http_subscription_routes.handle_subscription_qr(self)
             return
 
+        if self.path.startswith("/payqr/"):
+            http_qr_routes.handle_payment_qr(self)
+            return
+
         if self.path.startswith("/sub/"):
             http_subscription_routes.handle_subscription(self)
             return

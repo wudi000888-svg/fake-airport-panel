@@ -281,6 +281,98 @@ function orderKindLabel(kind) {
   return { create: "新开", renew: "续费" }[kind] || kind || "-";
 }
 
+function paymentStatusPill(status) {
+  const cls = status === "confirmed" ? "on" : status === "detected" ? "warn" : status === "failed" ? "off danger-pill" : status === "expired" ? "off" : "warn";
+  const label = {
+    awaiting_payment: "待付款",
+    detected: "已检测",
+    confirmed: "已到账",
+    failed: "校验失败",
+    expired: "已过期",
+  }[status] || status || "未创建";
+  return `<span class="pill ${cls}">${esc(label)}</span>`;
+}
+
+function paymentForOrder(order) {
+  const payments = state.data?.payments || [];
+  const paymentId = order?.payment_id || "";
+  return payments.find((p) => paymentId && p.id === paymentId) || payments.find((p) => p.order_id === order?.id) || null;
+}
+
+function paymentMethodLabel(method) {
+  if (!method) return "-";
+  const chain = { ethereum: "ETH 主网", bsc: "BSC", bitcoin: "Bitcoin" }[method.chain] || method.chain || "";
+  return `${method.asset || ""} / ${chain}`;
+}
+
+function paymentMethodOptions(selected = "") {
+  const methods = state.data?.payment_methods || [];
+  return methods.map((method) => `<option value="${esc(method.id)}" ${method.id === selected ? "selected" : ""}>${esc(paymentMethodLabel(method))} · ${esc(method.address || "")}</option>`).join("");
+}
+
+function paymentQrSrc(payload) {
+  return payload?.id ? `/payqr/${encodeURIComponent(payload.id)}` : "";
+}
+
+function paymentMini(payment) {
+  if (!payment) return '<span class="muted">未创建</span>';
+  return `<div class="payment-mini">
+    ${paymentStatusPill(payment.status)}
+    <span>${esc(payment.asset)} ${esc(payment.crypto_amount || "")}</span>
+    <span>${esc(payment.chain || "")}</span>
+  </div>`;
+}
+
+function paymentCard(payment) {
+  if (!payment) return "";
+  return `<article class="payment-card">
+    <div class="section-head">
+      <div><h3>${esc(payment.asset)} 链上付款</h3><p>订单 ${esc(payment.order_id)} · ${esc(payment.chain)}</p></div>
+      ${paymentStatusPill(payment.status)}
+    </div>
+    <div class="payment-grid">
+      <div>
+        <label>付款金额</label>
+        <div class="payment-code">${esc(payment.crypto_amount)} ${esc(payment.asset)}</div>
+      </div>
+      <div>
+        <label>收款地址</label>
+        <div class="copy-row compact"><code>${esc(payment.address)}</code><button type="button" class="secondary tiny" data-action="copy" data-text="${jsonAttr(payment.address || "")}">复制</button></div>
+      </div>
+      <div>
+        <label>付款 Payload</label>
+        <div class="copy-row compact"><code>${esc(payment.qr_payload || payment.address || "")}</code><button type="button" class="secondary tiny" data-action="copy" data-text="${jsonAttr(payment.qr_payload || payment.address || "")}">复制</button></div>
+      </div>
+      <div>
+        <label>链上确认</label>
+        <div class="payment-code">${esc(payment.confirmations || 0)} confirmations</div>
+      </div>
+    </div>
+    <div class="payment-qr-row">
+      <img class="qr" src="${esc(paymentQrSrc(payment))}" alt="付款二维码">
+      <form data-form="payment-submit" class="payment-submit">
+        <input type="hidden" name="id" value="${esc(payment.id)}">
+        <label>交易哈希 / TXID</label>
+        <input name="txid" value="${esc(payment.txid || "")}" placeholder="粘贴付款后的链上交易哈希" ${["confirmed", "failed", "expired"].includes(payment.status) ? "readonly" : ""} required>
+        <div class="actions">
+          <button class="good" ${state.busy || ["confirmed", "failed", "expired"].includes(payment.status) ? "disabled" : ""}>提交并校验</button>
+          <button type="button" class="secondary" data-action="payment-refresh" data-payment="${esc(payment.id)}" ${state.busy ? "disabled" : ""}>刷新到账</button>
+        </div>
+        ${payment.error ? `<div class="notice error">${esc(payment.error)}</div>` : ""}
+      </form>
+    </div>
+  </article>`;
+}
+
+function paymentsViewBlock() {
+  const payments = state.data?.payments || [];
+  if (!payments.length) return "";
+  return `<section class="panel">
+    <div class="section-head"><div><h2>链上付款记录</h2><p>提交 txid 后系统会按链上确认数校验到账。</p></div></div>
+    <div class="payment-list">${payments.slice(0, 6).map(paymentCard).join("")}</div>
+  </section>`;
+}
+
 function nodeKindLabel(kind) {
   return { vless: "VLESS", hy2: "Hysteria2" }[kind] || kind || "-";
 }
@@ -304,9 +396,21 @@ function nodeLocation(node) {
   return parts.join(" · ") || "未检测";
 }
 
+function orderPaymentActions(order, adminActions = false) {
+  const payment = paymentForOrder(order);
+  if (adminActions) {
+    return `${paymentMini(payment)}${payment ? `<button type="button" class="secondary tiny" data-action="payment-refresh" data-payment="${esc(payment.id)}">刷新</button>` : ""}`;
+  }
+  if (payment) return `${paymentMini(payment)}<button type="button" class="secondary tiny" data-action="payment-refresh" data-payment="${esc(payment.id)}">刷新</button>`;
+  if (order.status !== "pending") return '<span class="muted">无需付款</span>';
+  const options = paymentMethodOptions();
+  if (!options) return '<span class="muted">暂无链上收款方式</span>';
+  return `<div class="payment-start"><select data-payment-method-for="${esc(order.id)}">${options}</select><button type="button" class="good tiny" data-action="payment-start" data-order="${esc(order.id)}">付款</button></div>`;
+}
+
 function orderTable(orders, adminActions = false) {
-  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>用户</th><th>类型</th><th>套餐</th><th>天数</th><th>流量</th><th>状态</th>${adminActions ? "<th>操作</th>" : ""}</tr></thead><tbody>
-    ${orders.map((o) => `<tr><td>${esc(o.created_at)}</td><td>${esc(o.username)}</td><td>${esc(orderKindLabel(o.kind))}</td><td>${esc(o.plan_name || o.plan_id)}</td><td>${esc(o.days)}</td><td>${esc(o.traffic_gb)} GB</td><td>${orderStatusPill(o.status)}</td>${adminActions ? `<td>${o.status === "pending" ? `<button type="button" class="secondary" data-action="order-action" data-order="${esc(o.id)}" data-order-action="confirm">确认</button><button type="button" class="danger" data-action="order-action" data-order="${esc(o.id)}" data-order-action="cancel">取消</button>` : ""}</td>` : ""}</tr>`).join("") || `<tr><td colspan="${adminActions ? 8 : 7}">暂无订单</td></tr>`}
+  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>用户</th><th>类型</th><th>套餐</th><th>金额 USD</th><th>天数</th><th>流量</th><th>订单状态</th><th>链上付款</th>${adminActions ? "<th>操作</th>" : ""}</tr></thead><tbody>
+    ${orders.map((o) => `<tr><td>${esc(o.created_at)}</td><td>${esc(o.username)}</td><td>${esc(orderKindLabel(o.kind))}</td><td>${esc(o.plan_name || o.plan_id)}</td><td>${esc(o.amount ?? 0)}</td><td>${esc(o.days)}</td><td>${esc(o.traffic_gb)} GB</td><td>${orderStatusPill(o.status)}</td><td>${orderPaymentActions(o, adminActions)}</td>${adminActions ? `<td>${o.status === "pending" ? `<button type="button" class="secondary" data-action="order-action" data-order="${esc(o.id)}" data-order-action="confirm">确认</button><button type="button" class="danger" data-action="order-action" data-order="${esc(o.id)}" data-order-action="cancel">取消</button>` : ""}</td>` : ""}</tr>`).join("") || `<tr><td colspan="${adminActions ? 10 : 9}">暂无订单</td></tr>`}
   </tbody></table></div>`;
 }
 
@@ -323,7 +427,8 @@ function ordersView() {
       <button class="good">提交订单</button>
     </form>
   </section>
-  <section class="panel"><div class="section-head"><div><h2>${state.session?.role === "admin" ? "订单与续费记录" : "我的订单"}</h2><p>待确认订单需要管理员审核后才会生效。</p></div></div>${orderTable(orders, state.session?.role === "admin")}</section>`, "订单中心");
+  <section class="panel"><div class="section-head"><div><h2>${state.session?.role === "admin" ? "订单与续费记录" : "我的订单"}</h2><p>链上付款到账后会自动确认订单，人工订单仍可由管理员手动处理。</p></div></div>${orderTable(orders, state.session?.role === "admin")}</section>
+  ${paymentsViewBlock()}`, "订单中心");
 }
 
 function nodeStatusCard(n) {
@@ -447,8 +552,57 @@ function forgotView() {
   app.innerHTML = `<div class="login-wrap"><section class="panel login-card"><div class="mark">IP</div><h2>找回密码</h2><p>提交后等待管理员审核，审核通过后管理员会看到新密码。</p><form data-form="forgot"><label for="forgot-username">用户名</label><input id="forgot-username" name="username" required><button class="good">提交找回申请</button></form><div class="actions"><button type="button" class="secondary" data-nav="login">返回登录</button></div></section></div>`;
 }
 
+function paymentMethodRow(method) {
+  return `<tr>
+    <td>${esc(method.id)}<br><span class="muted">${esc(paymentMethodLabel(method))}</span></td>
+    <td><code>${esc(method.address)}</code></td>
+    <td>${esc(method.confirmations_required || 1)}</td>
+    <td>${method.enabled ? "启用" : "停用"}</td>
+    <td class="actions">
+      <button type="button" class="secondary" data-action="payment-method-action" data-method="${esc(method.id)}" data-method-action="${method.enabled ? "disable" : "enable"}">${method.enabled ? "停用" : "启用"}</button>
+      <button type="button" class="danger" data-action="payment-method-action" data-method="${esc(method.id)}" data-method-action="delete">删除</button>
+    </td>
+  </tr>`;
+}
+
+function paymentMethodsSettings() {
+  const methods = state.data?.payment_methods || [];
+  const rates = state.data?.payment_rates || {};
+  const overrides = rates.overrides || {};
+  return `
+    <section class="panel">
+      <div class="section-head"><div><h2>链上收款方式</h2><p>只填写收款地址和公开查询端点；不要导入任何钱包私钥。</p></div></div>
+      <form data-form="payment-method-save">
+        <div class="form-grid"><div><label>ID</label><input name="id" placeholder="usdt-eth" required></div><div><label>资产</label><select name="asset"><option>USDT</option><option>USDC</option><option>ETH</option><option>BNB</option><option>BTC</option></select></div></div>
+        <div class="form-grid"><div><label>链</label><select name="chain"><option value="ethereum">Ethereum mainnet</option><option value="bsc">BNB Smart Chain</option><option value="bitcoin">Bitcoin</option></select></div><div><label>确认数</label><input name="confirmations_required" value="3"></div></div>
+        <label>收款地址</label><input name="address" placeholder="0x... / bc1..." required>
+        <div class="form-grid"><div><label>RPC URL（EVM）</label><input name="rpc_url" placeholder="https://..."></div><div><label>BTC API URL</label><input name="btc_api_url" placeholder="https://blockstream.info/api"></div></div>
+        <div class="form-grid"><div><label>Token 合约（USDT / USDC）</label><input name="token_contract" placeholder="0x..."></div><div><label>小数位</label><input name="decimals" placeholder="稳定币默认 6，BTC 默认 8"></div></div>
+        <div class="form-grid"><div><label>排序</label><input name="sort" value="100"></div><div><label>启用</label><select name="enabled"><option value="true">启用</option><option value="false">停用</option></select></div></div>
+        <button class="good">保存收款方式</button>
+      </form>
+    </section>
+    <section class="panel">
+      <h2>收款方式列表</h2>
+      <div class="table-wrap"><table><thead><tr><th>ID / 资产</th><th>地址</th><th>确认数</th><th>状态</th><th>操作</th></tr></thead><tbody>
+        ${methods.map(paymentMethodRow).join("") || '<tr><td colspan="5">暂无收款方式</td></tr>'}
+      </tbody></table></div>
+    </section>
+    <section class="panel">
+      <h2>币价覆盖</h2>
+      <form data-form="payment-rates-save">
+        <div class="form-grid"><div><label>BTC USD</label><input name="BTC" value="${esc(overrides.BTC || "")}" placeholder="例如 100000"></div><div><label>ETH USD</label><input name="ETH" value="${esc(overrides.ETH || "")}" placeholder="例如 3000"></div></div>
+        <div class="form-grid"><div><label>BNB USD</label><input name="BNB" value="${esc(overrides.BNB || "")}" placeholder="例如 600"></div><div><label>USDT / USDC</label><input value="固定 1 USD" readonly></div></div>
+        <button class="blue">保存币价</button>
+      </form>
+    </section>`;
+}
+
 function settingsView() {
-  shell(`<section class="panel"><h2>管理员账号设置</h2><form data-form="settings"><label>当前管理员密码</label><input name="old_password" type="password" required><div class="form-grid"><div><label>管理员账号</label><input name="admin_username" required></div><div><label>管理员新密码</label><input name="admin_password" type="password"></div></div><div class="form-grid"><div><label>查看账号</label><input name="viewer_username" required></div><div><label>查看账号新密码</label><input name="viewer_password" type="password"></div></div><button class="blue">保存并重新登录</button></form></section>`, "系统设置");
+  shell(`
+    <section class="panel"><h2>管理员账号设置</h2><form data-form="settings"><label>当前管理员密码</label><input name="old_password" type="password" required><div class="form-grid"><div><label>管理员账号</label><input name="admin_username" required></div><div><label>管理员新密码</label><input name="admin_password" type="password"></div></div><div class="form-grid"><div><label>查看账号</label><input name="viewer_username" required></div><div><label>查看账号新密码</label><input name="viewer_password" type="password"></div></div><button class="blue">保存并重新登录</button></form></section>
+    ${paymentMethodsSettings()}
+  `, "系统设置");
 }
 
 function render() {
@@ -555,6 +709,26 @@ app.addEventListener("click", (event) => {
     });
   }
   else if (action === "order-action") runAction(async () => { await api("/api/orders/action", { method: "POST", body: { id: button.dataset.order || "", action: button.dataset.orderAction || "" } }); return "订单已更新"; });
+  else if (action === "payment-start") {
+    const orderId = button.dataset.order || "";
+    const selector = app.querySelector(`select[data-payment-method-for="${cssEscape(orderId)}"]`);
+    runAction(async () => {
+      const out = await api("/api/payments/create", { method: "POST", body: { order_id: orderId, method_id: selector?.value || "" } });
+      return `付款单已创建：${out.payment.id}`;
+    });
+  }
+  else if (action === "payment-refresh") runAction(async () => {
+    const out = await api("/api/payments/refresh", { method: "POST", body: { id: button.dataset.payment || "" } });
+    return `付款状态：${out.payment.status}`;
+  });
+  else if (action === "payment-method-action") {
+    const methodAction = button.dataset.methodAction || "";
+    if (methodAction === "delete" && !confirm(`确认删除收款方式 ${button.dataset.method || ""}？`)) return;
+    runAction(async () => {
+      await api("/api/payment-methods/action", { method: "POST", body: { id: button.dataset.method || "", action: methodAction } });
+      return "收款方式已更新";
+    });
+  }
   else if (action === "registration-action") runAction(async () => { await api("/api/registrations/action", { method: "POST", body: { token: button.dataset.token || "", action: button.dataset.registrationAction || "" } }); return "注册申请已处理"; });
   else if (action === "reset-action") runAction(async () => { const out = await api("/api/password-reset/action", { method: "POST", body: { token: button.dataset.token || "", action: button.dataset.resetAction || "" } }); return out.result?.password ? `新密码：${out.result.password}` : "找回申请已处理"; });
   else if (action === "backup-create") runAction(async () => { const out = await api("/api/backups/create", { method: "POST", body: { reason: "manual" } }); return `备份已创建：${out.backup.path}`; });
@@ -602,6 +776,26 @@ app.addEventListener("submit", (event) => {
     })();
   } else if (kind === "plan-save") runAction(async () => { await api("/api/plans/save", { method: "POST", body: formData(form) }); return "套餐已保存"; });
   else if (kind === "node-save") runAction(async () => { await api("/api/nodes/save", { method: "POST", body: formData(form) }); return "节点已保存"; });
+  else if (kind === "payment-submit") runAction(async () => {
+    const out = await api("/api/payments/submit-tx", { method: "POST", body: formData(form) });
+    return `付款状态：${out.payment.status}`;
+  });
+  else if (kind === "payment-method-save") runAction(async () => {
+    const data = formData(form);
+    data.enabled = data.enabled === "true";
+    await api("/api/payment-methods/save", { method: "POST", body: data });
+    form.reset();
+    return "收款方式已保存";
+  });
+  else if (kind === "payment-rates-save") runAction(async () => {
+    const raw = formData(form);
+    const overrides = {};
+    ["BTC", "ETH", "BNB"].forEach((asset) => {
+      if (String(raw[asset] || "").trim()) overrides[asset] = String(raw[asset]).trim();
+    });
+    await api("/api/payment-rates/save", { method: "POST", body: { overrides } });
+    return "币价已保存";
+  });
   else if (kind === "self-password") runAction(async () => { await api("/api/self/password", { method: "POST", body: formData(form) }); return "密码已修改"; });
   else if (kind === "settings") {
     (async () => {

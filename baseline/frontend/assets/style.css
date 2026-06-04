@@ -260,6 +260,55 @@ td { word-break: break-word; }
 .link-card { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fbfdff; }
 .qr { width: 170px; height: 170px; border: 1px solid var(--line); border-radius: 8px; background: #fff; padding: 8px; object-fit: contain; }
 .copy-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+.copy-row.compact { align-items: center; }
+code, .payment-code {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: #f8fafc;
+  color: #1d314a;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.payment-list { display: grid; gap: 14px; }
+.payment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.payment-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfdff;
+}
+.payment-card h3 { margin-top: 0; }
+.payment-mini {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+.payment-mini .pill { width: fit-content; margin-bottom: 0; }
+.payment-start {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 8px;
+  min-width: 260px;
+}
+.payment-start select { min-height: 34px; padding: 7px 9px; font-size: 13px; }
+.payment-qr-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  margin-top: 14px;
+}
+.payment-submit { align-content: start; }
+.danger-pill { background: #fff0f0; color: var(--danger); }
 pre {
   max-height: 240px;
   overflow: auto;
@@ -286,7 +335,7 @@ pre {
   .nav button { flex: 0 0 auto; padding: 9px 10px; }
   .main { width: min(100% - 24px, 1180px); margin-top: 14px; }
   .grid, .grid.three { grid-template-columns: 1fr; }
-  .form-grid, .copy-row, .kv-row { grid-template-columns: 1fr; }
+  .form-grid, .copy-row, .kv-row, .payment-grid, .payment-qr-row, .payment-start { grid-template-columns: 1fr; }
   .panel { padding: 16px; box-shadow: 0 10px 28px rgba(18, 34, 57, .08); }
   .section-head { align-items: stretch; flex-direction: column; gap: 10px; }
   .section-head .pill { width: fit-content; }
@@ -297,6 +346,8 @@ pre {
   .node-card .pill { flex: 0 0 auto; }
   .actions { display: grid; grid-template-columns: 1fr; }
   button, .button { width: 100%; }
+  .payment-mini { min-width: 220px; }
+  .payment-start { min-width: 240px; }
   th, td { padding: 10px; }
   table { min-width: 760px; }
   .qr { width: min(170px, 100%); height: auto; aspect-ratio: 1 / 1; }

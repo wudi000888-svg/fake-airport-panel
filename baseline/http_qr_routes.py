@@ -5,6 +5,7 @@ import node_catalog
 import user_store
 import xray_panel
 import simple_pages
+import payments_store
 from qr_service import qr_png_for_link
 
 
@@ -41,6 +42,25 @@ def handle_admin_node_qr(handler, username, role):
         handler.respond_bytes(qr_png_for_link(link), "image/png")
     except Exception as exc:
         handler.respond(simple_pages.qr_error(str(exc)), 403)
+
+
+def handle_payment_qr(handler):
+    try:
+        parts = handler.path.split("?", 1)[0].rstrip("/").strip("/").split("/")
+        payment_id = parts[1] if len(parts) > 1 else ""
+        payment = payments_store.get_payment(payment_id)
+        if not payment:
+            handler.respond_text("Invalid QR: payment not found", 404)
+            return
+        if handler.current_role() != "admin" and handler.current_username() != payment.get("username"):
+            handler.forbidden()
+            return
+        payload = payment.get("qr_payload") or payment.get("address") or ""
+        if not payload:
+            raise RuntimeError("payment QR payload missing")
+        handler.respond_bytes(qr_png_for_link(payload), "image/png")
+    except Exception as exc:
+        handler.respond_text("Invalid QR: " + str(exc), 403)
 
 
 def build_admin_node_link(kind, node_id=""):
