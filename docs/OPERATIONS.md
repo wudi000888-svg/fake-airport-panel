@@ -44,12 +44,24 @@ docker compose logs --tail=100 panel
 
 | 阶段 | 检查项 |
 | --- | --- |
-| 上线前 | 备份面板目录、Xray 配置、Hysteria2 配置 |
+| 上线前 | 备份面板目录、Xray 配置、Hysteria2 配置；确认备份包含 `payments.json` |
 | 上线前 | 远端 `bash scripts/test-local.sh` |
 | 上线前 | 远端 `python3 -m pytest -q` |
 | 上线前 | 临时端口启动面板，测试 `/login`、`/api/session`、`/api/users`、`/api/nodes` |
 | 上线 | 重启 `xray-proxy-panel` |
 | 上线后 | 检查面板 HTTPS、Xray active、Hysteria2 running |
+
+## 加密货币支付运维
+
+| 项目 | 要求 |
+| --- | --- |
+| 钱包权限 | 面板只需要收款地址和公开查询端点，不需要也不能导入钱包私钥、助记词或可签名凭据 |
+| 支持范围 | USDT/USDC 支持 Ethereum mainnet 与 BSC；ETH 使用 Ethereum mainnet；BNB 使用 BSC；BTC 使用公开区块链 API |
+| 汇率 | 订单按 USD 计价，稳定币固定 1 USD；BTC/ETH/BNB 可在管理员设置里填写 USD 覆盖价格 |
+| 链上校验 | 用户提交 txid 后，系统按配置的 RPC/API、收款地址、token 合约、金额和确认数校验到账 |
+| 生产配置 | 生产 RPC URL、API Key、真实收款地址写入面板运行数据，不要提交到 Git |
+| 测试流程 | 新增或修改收款方式后，先在测试机用小额订单验证二维码、txid 提交、确认数和自动开通 |
+| 上线边界 | 香港生产机上线前必须先备份 `data/`，并在新加坡测试机完成回归和回滚演练 |
 
 ## 生产环境变量
 

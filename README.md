@@ -86,7 +86,8 @@ fake-ui 就是把这两件事接在一起：
 | 节点管理 | 多 VLESS 节点、Hysteria2 节点、出口 IP/国家展示和自动命名 |
 | 出口编排 | 每个 VLESS 节点可独立使用直连、HTTP 上游或 SOCKS5 上游 |
 | 订阅 | 通用 base64、raw URI、Mihomo/Clash.Meta |
-| 运营 | 套餐、订单、注册审核、找回密码、审计日志 |
+| 运营 | 套餐、订单、加密货币收款、注册审核、找回密码、审计日志 |
+| 加密货币支付 | USD 计价订单，管理员配置收款地址，支持 USDT/USDC/ETH/BNB/BTC 的收款二维码与链上验证 |
 | 安全 | JSON 原子写入、配置校验、失败回滚、订阅访问限流 |
 | 部署 | 支持宿主机运行，也提供 Docker Compose 迁移方案 |
 
@@ -114,6 +115,7 @@ fake-ui 就是把这两件事接在一起：
 | `baseline/web_handler.py` | HTTP 总分发 |
 | `baseline/http_*_routes.py` | HTTP 路由层 |
 | `baseline/api*.py` | API 路由和权限层 |
+| `baseline/payment_*.py`、`baseline/payments_store.py` | 加密货币收款、汇率锁定和链上校验 |
 | `baseline/xray_*` | Xray 配置生成、校验、重启、状态 |
 | `baseline/hy2_*` | Hysteria2 配置生成、重启、状态 |
 | `baseline/*_store.py` | JSON 数据存储 |
@@ -236,6 +238,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-local.ps1
 | `data/` | 不提交 |
 | 证书和私钥 | 不提交 |
 | 用户数据和订阅 token | 不提交 |
+| 钱包私钥 / 助记词 | 不需要、不导入、不提交；系统只做 receive-only 收款和链上验账 |
+| 生产 RPC URL / API Key / 真实收款地址 | 写入面板运行数据或生产环境，不提交到仓库 |
 | 导出的迁移包 | 不提交 |
 
 ## 迁移
