@@ -342,3 +342,40 @@ def test_upsert_method_preserves_existing_created_at(payment_modules):
     assert updated["created_at"] == original_created_at
     assert updated["updated_at"]
     assert store.get_method("btc-main")["created_at"] == original_created_at
+
+
+def test_payment_rates_lock_amounts_with_overrides(payment_modules):
+    payment_rates = importlib.import_module("payment_rates")
+    payments_store = payment_modules["payments_store"]
+
+    payments_store.save_rates({"overrides": {"ETH": "3000"}, "cache": {"BTC": {"rate_usd": "100000", "updated_at": "now"}}})
+
+    assert payment_rates.rate_for_asset("USDT") == "1"
+    assert payment_rates.rate_for_asset("ETH") == "3000"
+    assert payment_rates.rate_for_asset("BTC") == "100000"
+    assert payment_rates.crypto_amount_for_usd("39", "ETH", 18) == "0.013000000000000000"
+    assert payment_rates.crypto_amount_for_usd("39", "BTC", 8) == "0.00039000"
+
+
+def test_payment_rates_validate_overrides(payment_modules):
+    payment_rates = importlib.import_module("payment_rates")
+
+    with pytest.raises(RuntimeError, match="rate must be positive"):
+        payment_rates.save_overrides({"ETH": "0"})
+
+
+def test_payment_rates_require_missing_volatile_rates(payment_modules):
+    payment_rates = importlib.import_module("payment_rates")
+
+    with pytest.raises(RuntimeError, match="missing USD rate for ETH"):
+        payment_rates.rate_for_asset("ETH")
+
+
+def test_payment_rates_round_up_and_support_usdc(payment_modules):
+    payment_rates = importlib.import_module("payment_rates")
+    payments_store = payment_modules["payments_store"]
+
+    payments_store.save_rates({"overrides": {"BTC": "30000"}, "cache": {}})
+
+    assert payment_rates.rate_for_asset("USDC") == "1"
+    assert payment_rates.crypto_amount_for_usd("1", "BTC", 8) == "0.00003334"
