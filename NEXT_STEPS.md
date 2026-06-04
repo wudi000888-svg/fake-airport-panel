@@ -17,24 +17,27 @@ This file tracks public-safe development direction. It intentionally avoids live
 
 | Version | Theme | Candidate Work |
 |---|---|---|
-| v1.2.1 | Upgrade and install polish | `UPGRADE.md`, `scripts/upgrade.sh`, stronger installer preflight report. |
-| v1.3.0 | Node orchestration | Exit quality checks, batch node refresh, per-user node visibility UX. |
-| v1.4.0 | Product experience | Dashboard polish, mobile UI improvements, clearer plan/order states. |
-| v1.5.0 | Operations | Scheduled backups, restore command, upgrade rollback helper. |
-| v2.0.0 | Expansion | Optional multi-server support, optional database, payment integration. |
+| v2.0.1 | Upgrade and install polish | `UPGRADE.md`, `scripts/upgrade.sh`, stronger installer preflight report. |
+| v2.1.0 | Node orchestration | Exit quality checks, batch node refresh, per-user node visibility UX. |
+| v2.2.0 | Product experience | Dashboard polish, clearer plan/order states, onboarding hints. |
+| v2.3.0 | Operations | Scheduled backups, restore command, upgrade rollback helper. |
+| v3.0.0 | Expansion | Optional multi-server control plane and advanced wallet automation. |
 
-## Completed in v1.2.0
+## Completed in v2.0.0
 
 | Area | Result |
 |---|---|
+| Commercial frontend | ES module frontend, mobile-first shell, bottom navigation, visible panel version, and QR-first checkout UX. |
+| Data layer | SQLite is the default v2 store, with JSON import/export compatibility for migration and rollback. |
+| Cache | TTL cache is available for dashboard/API reuse with admin cache clear controls. |
 | Crypto payments | USD-priced orders can be paid with USDT, USDC, ETH, BNB, or BTC. |
 | Admin setup | Admins can add receive-only payment methods with built-in chain defaults. |
 | Verification | EVM/BTC chain verification supports automatic scan, TXID fallback, and order activation. |
 | RPC resilience | Public RPC calls have fallback handling, EVM log scans are narrowed by payment time and split on range limits. |
 | Order UX | Pending, ambiguous, cancelled, and history states are separated in the frontend. |
-| Windows deploy | `scripts/deploy-compose-windows.ps1` packages, uploads, tests, backs up, rebuilds, and health-checks the panel. |
+| Windows deploy | `scripts/deploy-compose-windows.ps1` packages, uploads, migrates SQLite, tests, backs up, rebuilds, and health-checks the panel. |
 
-## v1.2.1 Candidate Tasks
+## v2.0.1 Candidate Tasks
 
 | Priority | Task | Acceptance Criteria |
 |---|---|---|
@@ -50,7 +53,7 @@ This file tracks public-safe development direction. It intentionally avoids live
 |---|---|
 | Local | `python -m py_compile docs/demo_data.py @(rg --files baseline -g "*.py")` on Windows or equivalent; `python -m pytest -q`. |
 | Remote preflight | `bash -n scripts/install-fresh-vps.sh`; `python3 -m py_compile ...`; `python3 -m pytest -q`. |
-| Live after deploy | Panel container healthy; `/login`, `/assets/app.js`, `/api/session` return 200; Xray config test OK; Hysteria2 running; Nginx active if native mode. |
+| Live after deploy | Panel container healthy; `/login`, `/assets/js/main.js`, `/api/session` return 200; Xray config test OK; Hysteria2 running; Nginx active if native mode. |
 
 ## Release Checklist
 

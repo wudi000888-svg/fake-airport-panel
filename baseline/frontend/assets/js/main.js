@@ -34,6 +34,25 @@ function firstEnabledPaymentMethod() {
 }
 
 
+function openCheckout(planId) {
+  app.querySelectorAll(".checkout-panel").forEach((panel) => {
+    panel.hidden = panel.dataset.checkoutFor !== planId;
+  });
+  const panel = app.querySelector(`.checkout-panel[data-checkout-for="${cssEscape(planId)}"]`);
+  panel?.querySelector("select, button")?.focus();
+  panel?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  return Boolean(panel);
+}
+
+
+function closeCheckout(planId = "") {
+  const selector = planId ? `.checkout-panel[data-checkout-for="${cssEscape(planId)}"]` : ".checkout-panel";
+  app.querySelectorAll(selector).forEach((panel) => {
+    panel.hidden = true;
+  });
+}
+
+
 async function copyText(text) {
   const value = String(text || "");
   if (!value) throw new Error("没有可复制的内容");
@@ -416,6 +435,28 @@ app.addEventListener("click", async (event) => {
     if (button.dataset.action === "copy-subscription" || button.dataset.action === "copy-node" || button.dataset.action === "copy") {
       await copyText(button.dataset.text || "");
       setNotice("已复制", "success");
+    }
+    if (button.dataset.action === "checkout-open") {
+      openCheckout(button.dataset.plan || "");
+      return;
+    }
+    if (button.dataset.action === "checkout-close") {
+      closeCheckout(button.dataset.plan || "");
+      return;
+    }
+    if (button.dataset.action === "checkout-start") {
+      const planId = button.dataset.plan || "";
+      const selector = app.querySelector(`select[data-payment-method-for-plan="${cssEscape(planId)}"]`);
+      const methodId = selector?.value || "";
+      await runAction(async () => {
+        if (!methodId) throw new Error("请选择付款方式");
+        const out = await post("/api/orders/create", { plan_id: planId, kind: "renew", note: "self-service checkout" });
+        const paymentOut = await post("/api/payments/create", { order_id: out.order.id, method_id: methodId });
+        state.route = "orders";
+        history.pushState(null, "", "/orders");
+        return `付款二维码已生成：${paymentOut.payment.asset} ${paymentOut.payment.crypto_amount}`;
+      });
+      return;
     }
     if (button.dataset.action === "buy-plan") {
       const planId = button.dataset.plan || "";

@@ -20,7 +20,7 @@ fake-ui 不是传统“大而全”的机场面板，而是专注解决一个更
 | H2 与 VLESS 共存 | 保留 Hysteria2 直连/代理能力，同时不影响 VLESS 节点编排 |
 | USD 计价链上收款 | 支持 USDT、USDC、ETH、BNB、BTC 收款，订单付款后自动链上验账 |
 | 移动端运营体验 | v2 前端使用模块化 ES modules 和移动优先布局，用户订单、付款和订阅不再挤在桌面表格里 |
-| SQLite 可切换数据层 | 默认保留 JSON 兼容，测试/迁移可用 `FAKE_UI_STORE=sqlite` 切换套餐和订单存储 |
+| SQLite 数据层 | v2 默认使用 `FAKE_UI_STORE=sqlite`，仍保留 JSON 导入/导出和兼容回退能力 |
 | TTL 缓存 | Dashboard、后续 RPC/汇率/订阅查询可复用统一缓存和管理员清理接口 |
 | 443 兼容部署 | 支持原生 Nginx 已占用 443 时，通过 SNI 分流兼容面板和 VLESS |
 | 轻量可迁移 | JSON 存储、Docker Compose、安装脚本和迁移脚本都围绕“新 VPS 快速复刻”设计 |

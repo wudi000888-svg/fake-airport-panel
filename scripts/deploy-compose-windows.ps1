@@ -106,6 +106,32 @@ rm -rf "`$WORK_DIR" "`$REMOTE_ARCHIVE"
 printf 'deployed_source=local-head\ncommit=%s\ndeployed_at=%s\n' "`$COMMIT" "`$(date -Iseconds)" > "`$REMOTE_DIR/.deployed-version"
 
 cd "`$REMOTE_DIR"
+touch .env
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path(".env")
+wanted = {
+    "FAKE_UI_VERSION": "2.0.0",
+    "FAKE_UI_STORE": "sqlite",
+    "FAKE_UI_DB": "/data/panel/fake-ui.db",
+}
+lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+seen = set()
+out = []
+for line in lines:
+    key = line.split("=", 1)[0].strip() if "=" in line else ""
+    if key in wanted:
+        out.append(f"{key}={wanted[key]}")
+        seen.add(key)
+    else:
+        out.append(line)
+for key, value in wanted.items():
+    if key not in seen:
+        out.append(f"{key}={value}")
+path.write_text("\n".join(out).strip() + "\n", encoding="utf-8")
+PY
+python3 scripts/migrate-json-to-sqlite.py --data-dir data/panel --db data/panel/fake-ui.db
 python3 -m pytest -q
 "@
 

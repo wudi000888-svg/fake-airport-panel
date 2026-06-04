@@ -7,7 +7,7 @@
 | 层级 | 主要文件 | 责任 |
 | --- | --- | --- |
 | 面板入口 | `baseline/panel.py`、`baseline/web_handler.py` | 启动 HTTP 服务、基础响应、总分发 |
-| 静态前端 | `baseline/frontend/index.html`、`baseline/frontend/assets/app.js`、`baseline/frontend/assets/style.css` | 输出前端页面和资源 |
+| 静态前端 | `baseline/frontend/index.html`、`baseline/frontend/assets/js/`、`baseline/frontend/assets/css/` | 输出模块化前端页面和资源 |
 | 路由层 | `baseline/http_auth_routes.py`、`baseline/http_api_routes.py`、`baseline/http_subscription_routes.py`、`baseline/http_qr_routes.py`、`baseline/http_static_routes.py` | 拆分登录、API、订阅、二维码和静态资源路由 |
 | 权限层 | `baseline/auth_store.py`、`baseline/session_store.py`、`baseline/api_security.py` | 管理员、普通用户、会话校验 |
 | 用户运营 | `baseline/user_store.py`、`baseline/user_admin.py`、`baseline/plans_store.py`、`baseline/orders_store.py` | 用户、套餐、订单、到期和禁用状态 |

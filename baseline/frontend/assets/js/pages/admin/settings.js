@@ -24,6 +24,14 @@ function methodCard(method) {
 }
 
 
+function paymentMethodsSettings(methods) {
+  return `
+    <div class="section-row"><h2>链上收款方式</h2><span>${methods.length}</span></div>
+    <div class="card-list">${methods.map(methodCard).join("") || `<article class="admin-card empty"><p>暂无收款方式</p><button data-action="payment-method-sheet" type="button">添加收款</button></article>`}</div>
+  `;
+}
+
+
 export function renderAdminSettings(data = {}) {
   const methods = data.payment_methods || [];
   return `
@@ -65,8 +73,7 @@ export function renderAdminSettings(data = {}) {
           <button class="primary" type="submit">保存收款方式</button>
         </form>
       </article>
-      <div class="section-row"><h2>链上收款方式</h2><span>${methods.length}</span></div>
-      <div class="card-list">${methods.map(methodCard).join("") || `<article class="admin-card empty"><p>暂无收款方式</p><button data-action="payment-method-sheet" type="button">添加收款</button></article>`}</div>
+      ${paymentMethodsSettings(methods)}
       <datalist id="payment-method-types">${methods.map((method) => `<option value="${esc(paymentType(method))}">${esc(method.id || "")}</option>`).join("")}</datalist>
     </section>
   `;

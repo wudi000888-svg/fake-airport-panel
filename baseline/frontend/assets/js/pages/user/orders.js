@@ -17,6 +17,11 @@ function paymentForOrder(order, payments) {
 }
 
 
+function orderForPayment(payment, orders = []) {
+  return orders.find((order) => order.id && order.id === payment.order_id) || null;
+}
+
+
 function orderBuckets(orders, payments) {
   const buckets = { active: [], ambiguous: [], history: [] };
   orders.forEach((order) => {
@@ -46,19 +51,71 @@ function timeline(payment) {
 }
 
 
+function paymentQrSrc(payment) {
+  return payment?.id ? `/payqr/${encodeURIComponent(payment.id)}` : "";
+}
+
+
+function paymentAmount(payment) {
+  const amount = payment?.crypto_amount || "";
+  const asset = payment?.asset || "";
+  return `${amount} ${asset}`.trim();
+}
+
+
+function paymentDetail(payment, needsTxid) {
+  const qrSrc = paymentQrSrc(payment);
+  const address = payment?.address || "";
+  const payload = payment?.qr_payload || address;
+  return `
+    <div class="payment-card">
+      <div class="payment-card-head">
+        <div>
+          <strong>${esc(payment?.asset || "链上")} 链上付款</strong>
+          <span>${esc(payment?.chain || "")}</span>
+        </div>
+        ${statusPill(payment?.status || "awaiting_payment")}
+      </div>
+      <div class="payment-grid">
+        <div class="payment-qr-wrap">
+          ${qrSrc ? `<img class="payment-qr" src="${esc(qrSrc)}" alt="${esc(payment?.asset || "链上")} 付款二维码" loading="lazy">` : ""}
+        </div>
+        <div class="payment-fields">
+          <label>付款金额<input class="payment-code" value="${esc(paymentAmount(payment))}" readonly></label>
+          <label>收款地址
+            <div class="copy-row">
+              <input class="payment-code" value="${esc(address)}" readonly>
+              <button class="secondary" data-action="copy" data-text="${esc(address)}" type="button">复制</button>
+            </div>
+          </label>
+          <label>付款 Payload
+            <div class="copy-row">
+              <input class="payment-code" value="${esc(payload)}" readonly>
+              <button class="secondary" data-action="copy" data-text="${esc(payload)}" type="button">复制</button>
+            </div>
+          </label>
+          <label>交易哈希 / TXID（可选）
+            <input name="txid" inputmode="text" value="${esc(payment?.txid || "")}" placeholder="${needsTxid ? "需要补 TXID" : "有歧义时再填写 TXID"}">
+          </label>
+          <div class="order-actions">
+            <button class="secondary" data-action="payment-submit-txid" data-payment="${esc(payment?.id || "")}" type="button">提交 TXID 兜底</button>
+            <button class="primary" data-action="payment-refresh" data-payment="${esc(payment?.id || "")}" type="button">我已付款，检查到账</button>
+          </div>
+          ${payment?.error ? `<p class="payment-error">${esc(payment.error)}</p>` : ""}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+
 function orderCard(order, payments, methods) {
   const payment = paymentForOrder(order, payments);
+  const finalOrder = order.status === "completed" || order.status === "cancelled";
   const needsTxid = payment?.status === "ambiguous" || order.payment_status === "ambiguous";
-  const finalOrder = ["completed", "cancelled"].includes(order.status);
   const methodOptions = paymentMethodOptions(methods);
-  const paymentActions = payment
-    ? `
-        <div class="order-actions">
-          <button class="primary" data-action="payment-refresh" data-payment="${esc(payment.id || "")}" type="button">检查到账</button>
-          <button class="secondary" data-action="payment-submit-txid" data-payment="${esc(payment.id || "")}" type="button">提交 TXID</button>
-        </div>
-        <input name="txid" inputmode="text" placeholder="${needsTxid ? "需要补 TXID" : "有歧义时再填写 TXID"}">
-      `
+  const paymentActions = finalOrder ? "" : payment
+    ? paymentDetail(payment, needsTxid)
     : (methodOptions
       ? `
         <div class="payment-start">
@@ -98,12 +155,18 @@ export function renderUserOrders(data = {}) {
   const payments = data.payments || [];
   const methods = data.payment_methods || [];
   const buckets = orderBuckets(orders, payments);
+  const activePayments = payments.filter((payment) => {
+    const linkedOrder = orderForPayment(payment, orders);
+    return linkedOrder?.status !== "cancelled"
+      && linkedOrder?.status !== "completed"
+      && ["awaiting_payment", "detected", "ambiguous"].includes(payment.status);
+  });
   return `
     <section class="screen stack">
       <div class="screen-head">
         <div>
           <h1>订单</h1>
-          <p>自动查账；多笔匹配时再补 TXID。</p>
+          <p>自动查账；多笔匹配时再补 TXID。当前待付款 ${activePayments.length} 笔。</p>
         </div>
         <button class="primary" data-action="open-plans" type="button">新订单</button>
       </div>

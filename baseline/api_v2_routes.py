@@ -1,6 +1,7 @@
 import cache_store
 import dashboard_service
 import user_store
+from app_version import APP_VERSION
 from api_common import ok, require_admin
 from http_utils import api_error
 
@@ -45,7 +46,7 @@ def shell_payload(session):
     return {
         "role": role,
         "username": username_for(session),
-        "version": "2.0.0",
+        "version": APP_VERSION,
         "nav": ADMIN_NAV if role == "admin" else USER_NAV,
         "secondary_nav": ADMIN_EXTENDED_NAV if role == "admin" else [],
     }

@@ -409,6 +409,9 @@ PANEL_IMAGE=xray-proxy-panel:local
 HYSTERIA_IMAGE=tobyxdd/hysteria:latest
 NGINX_IMAGE=nginx:1.27-alpine
 CERTBOT_IMAGE=certbot/certbot:latest
+FAKE_UI_VERSION=2.0.0
+FAKE_UI_STORE=sqlite
+FAKE_UI_DB=/data/panel/fake-ui.db
 EOF
 }
 
@@ -580,6 +583,10 @@ for p in sorted(Path("baseline").glob("*.py")):
 print("Python 编译通过")
 PY
   docker run --rm -v "$APP_DIR/data/xray:/etc/xray" "$XRAY_IMAGE" run -test -config /etc/xray/config.json
+}
+
+prepare_sqlite_store() {
+  python3 scripts/migrate-json-to-sqlite.py --data-dir data/panel --db data/panel/fake-ui.db
 }
 
 write_native_nginx_templates() {
@@ -910,7 +917,7 @@ final_start_and_check() {
 
   if [[ "$DEPLOY_MODE" == "internal" ]]; then
     curl -fsS "http://127.0.0.1:9100/login" >/dev/null
-    curl -fsS "http://127.0.0.1:9100/assets/app.js" >/dev/null
+    curl -fsS "http://127.0.0.1:9100/assets/js/main.js" >/dev/null
     curl -fsS "http://127.0.0.1:9100/api/session" >/dev/null
     return
   fi
@@ -919,7 +926,7 @@ final_start_and_check() {
   token="$(python3 -c 'import json; print(json.load(open("data/panel/admin_profile.json"))["user"]["sub_token"])')"
 
   curl -k -fsS "https://$PANEL_DOMAIN/login" >/dev/null
-  curl -k -fsS "https://$PANEL_DOMAIN/assets/app.js" >/dev/null
+  curl -k -fsS "https://$PANEL_DOMAIN/assets/js/main.js" >/dev/null
   curl -k -fsS "https://$PANEL_DOMAIN/api/session" >/dev/null
   local count
   count="$(curl -k -fsS "https://$PANEL_DOMAIN/sub/$token/raw" | grep -E '^(vless|hysteria2)://' | wc -l)"
@@ -1090,6 +1097,7 @@ init_dirs
 xray_keys
 write_runtime_json
 compile_and_validate
+prepare_sqlite_store
 start_for_certbot
 issue_cert
 generate_hy2_config

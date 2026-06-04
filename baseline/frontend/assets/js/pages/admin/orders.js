@@ -29,6 +29,18 @@ function matchesOrder(order, payment, query) {
 }
 
 
+function paymentCard(payment) {
+  return `
+    <div class="payment-mini">
+      <span class="mono">${esc(payment.asset || "")} ${esc(payment.crypto_amount || "")} · ${esc(payment.status || "")}</span>
+      <span>管理员核账</span>
+      <button class="secondary" data-action="payment-refresh" data-payment="${esc(payment.id || "")}" type="button">刷新到账</button>
+      <button class="secondary" data-action="payment-submit-txid" data-payment="${esc(payment.id || "")}" type="button">补录 TXID</button>
+    </div>
+  `;
+}
+
+
 function orderCard(order, payments) {
   const payment = paymentForOrder(order, payments);
   const canOperate = order.status === "pending";
@@ -39,11 +51,10 @@ function orderCard(order, payments) {
         ${statusPill(order.status)}
       </div>
       <p>${esc(order.plan_name || order.plan_id || order.kind || "订单")} · ${money(order.amount)} · ${esc(order.created_at || "")}</p>
-      ${payment ? `<p class="mono">${esc(payment.asset || "")} ${esc(payment.crypto_amount || "")} · ${esc(payment.status || "")}</p>` : `<p>暂无链上付款单</p>`}
+      ${payment ? paymentCard(payment) : `<p>暂无链上付款单</p>`}
       <div class="admin-actions">
         ${canOperate ? `<button class="secondary" data-action="order-action" data-order="${esc(order.id || "")}" data-order-action="confirm" type="button">确认</button>` : ""}
         ${canOperate ? `<button class="secondary quiet-danger" data-action="order-action" data-order="${esc(order.id || "")}" data-order-action="cancel" type="button">取消</button>` : ""}
-        ${payment ? `<button class="secondary" data-action="payment-refresh" data-payment="${esc(payment.id || "")}" type="button">查账</button>` : ""}
       </div>
     </article>
   `;

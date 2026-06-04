@@ -28,6 +28,11 @@ def test_frontend_v2_modules_exist_and_index_uses_module_entry():
         assert (ASSETS / path).exists(), path
 
 
+def test_frontend_v2_removes_legacy_single_file_assets():
+    assert not (ASSETS / "app.js").exists()
+    assert not (ASSETS / "style.css").exists()
+
+
 def test_frontend_v2_mobile_shell_tokens_are_present():
     css = read_asset("css/layout.css")
     assert "@media (max-width: 767px)" in css
@@ -59,6 +64,14 @@ def test_frontend_v2_user_pages_have_mobile_commercial_flows():
     assert "已取消" in orders
     assert "payment-start" in orders
     assert "paymentMethodOptions" in orders
+    assert "/payqr/" in orders
+    assert "payment-qr" in orders
+    plans = (assets / "plans.js").read_text(encoding="utf-8")
+    assert "checkout-panel" in plans
+    assert "data-payment-method-for-plan" in plans
+    assert 'data-action="checkout-open"' in plans
+    assert 'data-action="checkout-start"' in plans
+    assert 'data-action="checkout-close"' in plans
 
 
 def test_frontend_v2_admin_pages_use_task_cards_and_bottom_sheets():
@@ -87,7 +100,9 @@ def test_frontend_v2_spa_wires_commercial_actions():
     ]:
         assert endpoint in main
     for action in [
-        "buy-plan",
+        "checkout-open",
+        "checkout-close",
+        "checkout-start",
         "payment-start",
         "payment-refresh",
         "payment-submit-txid",
@@ -112,10 +127,17 @@ def test_frontend_v2_page_actions_are_wired_in_main_dispatcher():
 
 
 def test_frontend_v2_layout_prevents_dashboard_overflow():
+    layout_js = read_asset("js/components/layout.js")
     layout_css = read_asset("css/layout.css")
     components_css = read_asset("css/components.css")
 
+    assert "version-chip" in layout_js
+    assert "state.shell?.version" in layout_js
+    assert "side-nav-footer" in layout_js
     assert "overflow-x: hidden" in layout_css
+    assert "overflow-y: auto" in layout_css
+    assert ".side-nav-footer" in layout_css
+    assert ".version-chip" in layout_css
     assert "max-width:" in layout_css
     assert ".workspace-v2" in layout_css
     assert "minmax(0, 1fr)" in components_css

@@ -94,7 +94,7 @@ If the deployment uses container Nginx, include `nginx` in the `up -d` command. 
 | Containers | `docker compose ps` |
 | Panel health | `docker inspect -f '{{.State.Health.Status}}' xray-proxy-panel` |
 | Login page | `curl -k -fsS https://PANEL_DOMAIN/login >/dev/null` |
-| Frontend JS | `curl -k -fsS https://PANEL_DOMAIN/assets/app.js >/dev/null` |
+| Frontend JS | `curl -k -fsS https://PANEL_DOMAIN/assets/js/main.js >/dev/null` |
 | Session API | `curl -k -fsS https://PANEL_DOMAIN/api/session` |
 | Xray config | `docker exec xray xray run -test -config /etc/xray/config.json` |
 | User sync | `docker exec xray-proxy-panel python3 /app/enforce_users.py` |

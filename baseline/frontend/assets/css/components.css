@@ -235,6 +235,20 @@ label {
   font-weight: 800;
 }
 
+.checkout-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.checkout-panel > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
 .order-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -274,6 +288,78 @@ label {
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.payment-card {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.payment-card-head,
+.payment-mini {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.payment-grid {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.payment-qr-wrap {
+  width: 164px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+}
+
+.payment-qr {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  display: block;
+}
+
+.payment-fields {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.payment-code {
+  font-size: 13px;
+}
+
+.copy-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.payment-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  color: var(--danger);
+  background: var(--danger-soft);
+  font-weight: 700;
 }
 
 .payment-timeline {
@@ -452,6 +538,19 @@ code {
   }
 
   .payment-start {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .payment-qr-wrap {
+    width: min(220px, 100%);
+    justify-self: center;
+  }
+
+  .copy-row {
     grid-template-columns: 1fr;
   }
 

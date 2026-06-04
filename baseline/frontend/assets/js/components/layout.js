@@ -36,20 +36,30 @@ export function layout(content) {
   const secondary = secondaryItems.map(navButton).join("");
   const username = state.shell?.username || state.session?.username || "";
   const role = state.shell?.role === "admin" ? "管理员" : "用户";
+  const version = state.shell?.version || "2.0.0";
   return `
     <div class="app-shell-v2">
       <aside class="side-nav" aria-label="主导航">
         <div class="brand-block">
-          <strong>fake-ui</strong>
+          <div class="brand-title">
+            <strong>fake-ui</strong>
+            <span class="version-chip">v${esc(version)}</span>
+          </div>
           <span>单机多出口代理编排系统</span>
         </div>
         <div class="nav-stack">${nav}</div>
-        ${secondary ? `<div class="nav-stack secondary">${secondary}</div>` : ""}
+        <div class="side-nav-footer">
+          ${secondary ? `<div class="nav-stack secondary">${secondary}</div>` : ""}
+          <div class="side-nav-meta">
+            <span>${esc(username || role)}</span>
+            <span>v${esc(version)}</span>
+          </div>
+        </div>
       </aside>
       <div class="workspace-v2">
         <header class="topbar">
           <div>
-            <strong>fake-ui</strong>
+            <strong>fake-ui <span class="version-chip">v${esc(version)}</span></strong>
             <span>单机多出口代理编排系统</span>
           </div>
           <div class="identity-chip">${esc(username || role)}</div>
