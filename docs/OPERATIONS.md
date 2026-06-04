@@ -7,6 +7,35 @@
 | 编译全部 Python 文件 | `bash scripts/test-local.sh` 或 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-local.ps1` |
 | 单元测试 | `python -m pytest -q` |
 | PowerShell 一键测试 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-local.ps1` |
+
+## Windows 部署到 Compose 机器
+
+从 Windows/PowerShell 部署时不要直接写 `git archive | ssh ... tar`，也不要把远端 `$(date ...)`、`$var`、复杂管道写在 PowerShell 的 SSH 字符串里；PowerShell 会先解析这些内容，here-string 也容易带 BOM/CRLF。
+
+使用项目内置脚本：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy-compose-windows.ps1 -HostAlias fake-ui-sg -RemoteDir /opt/fake-airport
+```
+
+脚本会：
+
+| 步骤 | 说明 |
+| --- | --- |
+| 本地测试 | 默认先运行 `scripts/test-local.ps1` |
+| 打包 | 使用 `git archive -o` 生成本地 tar 文件，不走 PowerShell 二进制管道 |
+| 上传 | 通过 `scp` 上传 tar 和远端部署脚本 |
+| 远端脚本 | 使用 UTF-8 无 BOM、LF 换行写入，再由远端 `bash` 执行 |
+| 备份 | 在远端 `/root/fake-airport-backups/` 生成部署前备份 |
+| 同步 | 保留 `.env`、`data/`、`generated/`，只覆盖代码文件 |
+| 验证 | 远端运行 pytest，并重建 `panel` 服务，等待健康检查 |
+
+可选参数：
+
+| 参数 | 用途 |
+| --- | --- |
+| `-SkipTests` | 跳过本地测试，仅建议已刚跑过测试时使用 |
+| `-SkipBuild` | 只同步代码和远端测试，不重建 panel 容器 |
 | Bash 一键测试 | `bash scripts/test-local.sh` |
 
 ## Docker Compose 部署流程
