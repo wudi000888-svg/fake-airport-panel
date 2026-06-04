@@ -21,6 +21,21 @@ def handle_user_post(clean, data, session):
         audit_log.write(session.get("u", username), "order.create", order.get("id", ""), {"username": username, "plan_id": plan.get("id")})
         return ok(order=order, orders=orders_store.list_orders(username=None if role == "admin" else username))
 
+    if clean == "/api/orders/action" and (session.get("role") or session.get("r")) != "admin":
+        action = data.get("action", "")
+        order_id = data.get("id", "")
+        if action != "cancel":
+            from http_utils import api_error
+
+            return api_error("forbidden", 403)
+        order = orders_store.get_order(order_id)
+        if not order or order.get("username") != session.get("u", ""):
+            from http_utils import api_error
+
+            return api_error("order not found", 404)
+        result = user_admin.cancel_order(order_id, operator=session.get("u", ""))
+        return ok(result=result, orders=orders_store.list_orders(username=session.get("u", "")))
+
     if clean == "/api/users/create":
         result = user_admin.create_airport_user(
             data.get("username", ""),

@@ -33,7 +33,7 @@ def handle_post(path, data, session):
         return ok(**result)
 
     if not is_admin(session):
-        if clean == "/api/orders/create":
+        if clean in {"/api/orders/create", "/api/orders/action"}:
             return handle_user_post(clean, data, session)
         payment_result = handle_payment_post(clean, data, session)
         if payment_result is not None:

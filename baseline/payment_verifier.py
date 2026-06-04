@@ -6,6 +6,7 @@ from decimal import Decimal, InvalidOperation, getcontext
 getcontext().prec = 78
 
 ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+HTTP_USER_AGENT = "fake-ui/1.1.1"
 
 
 def normalize_address(value):
@@ -252,7 +253,7 @@ def rpc_call(rpc_url, method, params):
     request = urllib.request.Request(
         str(rpc_url),
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "User-Agent": HTTP_USER_AGENT},
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=20) as response:
@@ -265,6 +266,6 @@ def rpc_call(rpc_url, method, params):
 
 
 def http_json(url):
-    request = urllib.request.Request(str(url), headers={"Accept": "application/json"})
+    request = urllib.request.Request(str(url), headers={"Accept": "application/json", "User-Agent": HTTP_USER_AGENT})
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))

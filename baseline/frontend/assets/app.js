@@ -408,9 +408,14 @@ function orderPaymentActions(order, adminActions = false) {
   return `<div class="payment-start"><select data-payment-method-for="${esc(order.id)}">${options}</select><button type="button" class="good tiny" data-action="payment-start" data-order="${esc(order.id)}">付款</button></div>`;
 }
 
+function orderSelfActions(order) {
+  if (state.session?.role === "admin" || order.status !== "pending") return "";
+  return `<button type="button" class="danger tiny" data-action="order-cancel" data-order="${esc(order.id)}">取消订单</button>`;
+}
+
 function orderTable(orders, adminActions = false) {
-  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>用户</th><th>类型</th><th>套餐</th><th>金额 USD</th><th>天数</th><th>流量</th><th>订单状态</th><th>链上付款</th>${adminActions ? "<th>操作</th>" : ""}</tr></thead><tbody>
-    ${orders.map((o) => `<tr><td>${esc(o.created_at)}</td><td>${esc(o.username)}</td><td>${esc(orderKindLabel(o.kind))}</td><td>${esc(o.plan_name || o.plan_id)}</td><td>${esc(o.amount ?? 0)}</td><td>${esc(o.days)}</td><td>${esc(o.traffic_gb)} GB</td><td>${orderStatusPill(o.status)}</td><td>${orderPaymentActions(o, adminActions)}</td>${adminActions ? `<td>${o.status === "pending" ? `<button type="button" class="secondary" data-action="order-action" data-order="${esc(o.id)}" data-order-action="confirm">确认</button><button type="button" class="danger" data-action="order-action" data-order="${esc(o.id)}" data-order-action="cancel">取消</button>` : ""}</td>` : ""}</tr>`).join("") || `<tr><td colspan="${adminActions ? 10 : 9}">暂无订单</td></tr>`}
+  return `<div class="table-wrap"><table><thead><tr><th>时间</th><th>用户</th><th>类型</th><th>套餐</th><th>金额 USD</th><th>天数</th><th>流量</th><th>订单状态</th><th>链上付款</th><th>操作</th></tr></thead><tbody>
+    ${orders.map((o) => `<tr><td>${esc(o.created_at)}</td><td>${esc(o.username)}</td><td>${esc(orderKindLabel(o.kind))}</td><td>${esc(o.plan_name || o.plan_id)}</td><td>${esc(o.amount ?? 0)}</td><td>${esc(o.days)}</td><td>${esc(o.traffic_gb)} GB</td><td>${orderStatusPill(o.status)}</td><td>${orderPaymentActions(o, adminActions)}</td><td>${adminActions ? (o.status === "pending" ? `<button type="button" class="secondary" data-action="order-action" data-order="${esc(o.id)}" data-order-action="confirm">确认</button><button type="button" class="danger" data-action="order-action" data-order="${esc(o.id)}" data-order-action="cancel">取消</button>` : "") : orderSelfActions(o)}</td></tr>`).join("") || `<tr><td colspan="10">暂无订单</td></tr>`}
   </tbody></table></div>`;
 }
 
@@ -709,6 +714,13 @@ app.addEventListener("click", (event) => {
     });
   }
   else if (action === "order-action") runAction(async () => { await api("/api/orders/action", { method: "POST", body: { id: button.dataset.order || "", action: button.dataset.orderAction || "" } }); return "订单已更新"; });
+  else if (action === "order-cancel") {
+    if (!confirm(`确认取消订单 ${button.dataset.order || ""}？`)) return;
+    runAction(async () => {
+      await api("/api/orders/action", { method: "POST", body: { id: button.dataset.order || "", action: "cancel" } });
+      return "订单已取消";
+    });
+  }
   else if (action === "payment-start") {
     const orderId = button.dataset.order || "";
     const selector = app.querySelector(`select[data-payment-method-for="${cssEscape(orderId)}"]`);

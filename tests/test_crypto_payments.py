@@ -741,6 +741,38 @@ def test_rpc_call_sanitizes_json_rpc_error(monkeypatch, payment_modules):
     assert "secret" not in error
 
 
+def test_rpc_and_http_json_send_user_agent(monkeypatch, payment_modules):
+    verifier = importlib.import_module("payment_verifier")
+    seen = []
+
+    class FakeResponse:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return self.body
+
+    def fake_urlopen(request, timeout):
+        seen.append(dict(request.header_items()))
+        if request.full_url.endswith("/rpc"):
+            return FakeResponse(json.dumps({"result": "0x1"}).encode("utf-8"))
+        return FakeResponse(json.dumps({"ok": True}).encode("utf-8"))
+
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", fake_urlopen)
+
+    assert verifier.rpc_call("https://example.test/rpc", "eth_blockNumber", []) == "0x1"
+    assert verifier.http_json("https://example.test/api") == {"ok": True}
+
+    assert seen[0]["User-agent"].startswith("fake-ui/")
+    assert seen[1]["User-agent"].startswith("fake-ui/")
+
+
 def create_standard_order_and_method(monkeypatch):
     plans_store = importlib.import_module("plans_store")
     orders_store = importlib.import_module("orders_store")
@@ -1045,6 +1077,30 @@ def test_user_post_admin_actions_stay_forbidden(payment_modules):
     status, payload = api.handle_post("/api/orders/action", {"id": "ord_1", "action": "confirm"}, user_session("alice"))
     assert status == 403
     assert payload["ok"] is False
+
+
+def test_user_can_cancel_own_pending_order_but_not_confirm_or_cancel_others(payment_modules, monkeypatch):
+    api = importlib.import_module("api")
+    orders_store = importlib.import_module("orders_store")
+    plans_store = importlib.import_module("plans_store")
+    user_admin = importlib.import_module("user_admin")
+
+    monkeypatch.setattr(user_admin, "enforce_users_now", lambda: "ok")
+    plan = plans_store.upsert_plan({"id": "standard", "name": "Standard", "days": "30", "traffic_gb": "100", "price": "39"})
+    alice_order = orders_store.create_pending_order("alice", "renew", plan, operator="alice")
+    bob_order = orders_store.create_pending_order("bob", "renew", plan, operator="bob")
+
+    status, payload = api.handle_post("/api/orders/action", {"id": alice_order["id"], "action": "confirm"}, user_session("alice"))
+    assert status == 403
+    assert payload["ok"] is False
+
+    status, payload = api.handle_post("/api/orders/action", {"id": bob_order["id"], "action": "cancel"}, user_session("alice"))
+    assert status == 404
+    assert payload["ok"] is False
+
+    status, payload = api.handle_post("/api/orders/action", {"id": alice_order["id"], "action": "cancel"}, user_session("alice"))
+    assert status == 200
+    assert orders_store.get_order(alice_order["id"])["status"] == "cancelled"
 
 
 def test_user_order_create_ignores_body_username(payment_modules, monkeypatch):
