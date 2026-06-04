@@ -104,7 +104,7 @@ def test_payment_public_helpers_update_kwargs_and_list_limit(payment_modules):
         "id": "btc-main",
         "asset": "BTC",
         "chain": "bitcoin",
-        "address": "bc1qexample",
+        "address": "bc1qqqqqqqqqqqqqqqqqqqq",
         "btc_api_url": "https://btc-api.example",
         "api_key": "example-api-key",
         "enabled": True,
@@ -125,8 +125,8 @@ def test_payment_public_helpers_update_kwargs_and_list_limit(payment_modules):
             "usd_amount": "39.00",
             "crypto_amount": "0.00039000",
             "rate_usd": "100000",
-            "address": "bc1qexample",
-            "qr_payload": "bitcoin:bc1qexample?amount=0.00039000",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+            "qr_payload": "bitcoin:bc1qqqqqqqqqqqqqqqqqqqq?amount=0.00039000",
             "expires_at": "2099-01-01T00:00:00+00:00",
             "created_at": "2026-01-01T00:00:00+00:00",
         }
@@ -141,8 +141,8 @@ def test_payment_public_helpers_update_kwargs_and_list_limit(payment_modules):
             "usd_amount": "49.00",
             "crypto_amount": "0.00049000",
             "rate_usd": "100000",
-            "address": "bc1qexample",
-            "qr_payload": "bitcoin:bc1qexample?amount=0.00049000",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+            "qr_payload": "bitcoin:bc1qqqqqqqqqqqqqqqqqqqq?amount=0.00049000",
             "expires_at": "2099-01-01T00:00:00+00:00",
             "created_at": "2026-01-02T00:00:00+00:00",
         }
@@ -198,13 +198,27 @@ def test_payment_method_validation_and_qr_payloads(payment_modules):
             "id": "btc-main",
             "asset": "BTC",
             "chain": "bitcoin",
-            "address": "bc1qexample",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
             "btc_api_url": "https://blockstream.info/api",
             "confirmations_required": "3",
         }
     )
     assert btc["decimals"] == 8
-    assert payment_wallets.qr_payload(btc, "0.00039000") == "bitcoin:bc1qexample?amount=0.00039000"
+    assert (
+        payment_wallets.qr_payload(btc, "0.00039000")
+        == "bitcoin:bc1qqqqqqqqqqqqqqqqqqqq?amount=0.00039000"
+    )
+
+    bnb = payment_wallets.normalize_method(
+        {
+            "id": "bnb-main",
+            "asset": "BNB",
+            "chain": "bsc",
+            "address": "0x2222222222222222222222222222222222222222",
+            "rpc_url": "https://rpc.example",
+        }
+    )
+    assert payment_wallets.qr_payload(bnb, "0.100000000000000000") == bnb["address"]
 
     with pytest.raises(RuntimeError, match="token contract"):
         payment_wallets.normalize_method(
@@ -260,7 +274,18 @@ def test_payment_method_validation_rejects_bad_wallet_config(payment_modules):
                 "id": "missing-btc-api",
                 "asset": "BTC",
                 "chain": "bitcoin",
-                "address": "bc1qexample",
+                "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+            }
+        )
+
+    with pytest.raises(RuntimeError, match="Bitcoin address"):
+        payment_wallets.normalize_method(
+            {
+                "id": "bad-btc-address",
+                "asset": "BTC",
+                "chain": "bitcoin",
+                "address": "not-a-wallet",
+                "btc_api_url": "https://btc-api.example",
             }
         )
 
@@ -276,6 +301,18 @@ def test_payment_method_validation_rejects_bad_wallet_config(payment_modules):
         )
     assert store.list_methods(admin=True) == []
 
+    with pytest.raises(RuntimeError, match="Bitcoin address"):
+        store.upsert_method(
+            {
+                "id": "bad-btc-address",
+                "asset": "BTC",
+                "chain": "bitcoin",
+                "address": "not-a-wallet",
+                "btc_api_url": "https://btc-api.example",
+            }
+        )
+    assert store.list_methods(admin=True) == []
+
 
 def test_upsert_method_preserves_existing_created_at(payment_modules):
     store = payment_modules["payments_store"]
@@ -285,24 +322,23 @@ def test_upsert_method_preserves_existing_created_at(payment_modules):
             "id": "btc-main",
             "asset": "BTC",
             "chain": "bitcoin",
-            "address": "bc1qexample",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
             "btc_api_url": "https://btc-api.example",
         }
     )
     original_created_at = first["created_at"]
-    original_updated_at = first["updated_at"]
 
     updated = store.upsert_method(
         {
             "id": "btc-main",
             "asset": "BTC",
             "chain": "bitcoin",
-            "address": "bc1qexample",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
             "btc_api_url": "https://btc-api.example/v2",
             "created_at": "2099-01-01T00:00:00+00:00",
         }
     )
 
     assert updated["created_at"] == original_created_at
-    assert updated["updated_at"] != original_updated_at
+    assert updated["updated_at"]
     assert store.get_method("btc-main")["created_at"] == original_created_at

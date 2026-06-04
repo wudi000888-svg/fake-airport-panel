@@ -13,6 +13,8 @@ SUPPORTED = {
     ("BTC", "bitcoin"),
 }
 EVM_ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
+BTC_BECH32_RE = re.compile(r"^(bc1|tb1)[023456789acdefghjklmnpqrstuvwxyz]{20,}$", re.IGNORECASE)
+BTC_BASE58_RE = re.compile(r"^[13mn2][123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]{25,34}$")
 
 
 def is_evm_chain(chain):
@@ -46,6 +48,13 @@ def validate_evm_address(value, field="EVM address"):
     if not EVM_ADDRESS_RE.match(address):
         raise RuntimeError(f"{field} invalid")
     return address.lower()
+
+
+def validate_btc_address(value):
+    address = str(value or "").strip()
+    if not (BTC_BECH32_RE.match(address) or BTC_BASE58_RE.match(address)):
+        raise RuntimeError("Bitcoin address invalid")
+    return address
 
 
 def _positive_int(value, field):
@@ -85,7 +94,7 @@ def normalize_method(method):
             raise RuntimeError("rpc_url required")
         item["rpc_url"] = str(item["rpc_url"]).strip()
     elif item["chain"] == "bitcoin":
-        item["address"] = address
+        item["address"] = validate_btc_address(address)
         if not str(item.get("btc_api_url") or "").strip():
             raise RuntimeError("btc_api_url required")
         item["btc_api_url"] = str(item["btc_api_url"]).strip()
@@ -123,8 +132,10 @@ def qr_payload(method, amount):
     value = str(amount)
     if asset == "BTC" and chain == "bitcoin":
         return f"bitcoin:{address}?amount={value}"
-    if asset in {"ETH", "BNB"} and is_evm_chain(chain):
+    if asset == "ETH" and chain == "ethereum":
         return f"ethereum:{address}?value={value}"
+    if asset == "BNB" and chain == "bsc":
+        return address
     if asset in STABLE_ASSETS:
         return address
     raise RuntimeError("unsupported payment asset or chain")
