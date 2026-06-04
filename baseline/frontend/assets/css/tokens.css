@@ -1,0 +1,20 @@
+:root {
+  --bg: #f5f7fb;
+  --surface: #ffffff;
+  --surface-soft: #f9fbff;
+  --ink: #101828;
+  --muted: #667085;
+  --line: #d8e0ea;
+  --primary: #1f5eff;
+  --primary-soft: #e9efff;
+  --success: #12805c;
+  --success-soft: #dcfce7;
+  --warning: #b7791f;
+  --warning-soft: #fff3cf;
+  --danger: #c2413b;
+  --danger-soft: #fff1f1;
+  --nav: #172033;
+  --radius: 8px;
+  --tap: 44px;
+  --shadow: 0 10px 30px rgba(16, 24, 40, 0.08);
+}
