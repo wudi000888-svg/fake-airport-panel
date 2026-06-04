@@ -6,7 +6,7 @@ from decimal import Decimal, InvalidOperation, getcontext
 getcontext().prec = 78
 
 ERC20_TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-HTTP_USER_AGENT = "fake-ui/1.1.1"
+HTTP_USER_AGENT = "fake-ui/1.1.2"
 
 
 def normalize_address(value):
@@ -248,21 +248,42 @@ def verify_btc_tx(tx, tip_height, to_address, required_amount, confirmations_req
         return _failed(exc, 8)
 
 
+def _url_candidates(value):
+    if isinstance(value, (list, tuple)):
+        raw_items = value
+    else:
+        raw_items = [value]
+    urls = []
+    for item in raw_items:
+        url = str(item or "").strip()
+        if url and url not in urls:
+            urls.append(url)
+    if not urls:
+        raise RuntimeError("rpc_url required")
+    return urls
+
+
 def rpc_call(rpc_url, method, params):
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode("utf-8")
-    request = urllib.request.Request(
-        str(rpc_url),
-        data=payload,
-        headers={"Content-Type": "application/json", "User-Agent": HTTP_USER_AGENT},
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        data = json.loads(response.read().decode("utf-8"))
-    if data.get("error"):
-        error = data["error"]
-        message = error.get("message") if isinstance(error, dict) else None
-        raise RuntimeError(str(message or "rpc error")[:200])
-    return data.get("result")
+    last_error = None
+    for url in _url_candidates(rpc_url):
+        try:
+            request = urllib.request.Request(
+                str(url),
+                data=payload,
+                headers={"Content-Type": "application/json", "User-Agent": HTTP_USER_AGENT},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=20) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            if data.get("error"):
+                error = data["error"]
+                message = error.get("message") if isinstance(error, dict) else None
+                raise RuntimeError(str(message or "rpc error")[:200])
+            return data.get("result")
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError(str(last_error or "rpc error")[:200])
 
 
 def http_json(url):

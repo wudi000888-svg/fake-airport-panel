@@ -18,6 +18,10 @@ def test_frontend_exposes_crypto_payment_user_flow():
     assert "/api/payments/refresh" in source
     assert "/payqr/" in source
     assert "api.qrserver.com" not in source
+    assert "交易哈希 / TXID（可选）" in source
+    assert "我已付款，检查到账" in source
+    assert "function orderBuckets" in source
+    assert "需要补 TXID" in source
 
 
 def test_frontend_exposes_crypto_payment_admin_settings():
@@ -30,6 +34,9 @@ def test_frontend_exposes_crypto_payment_admin_settings():
     assert "/api/payment-methods/save" in source
     assert "/api/payment-methods/action" in source
     assert "/api/payment-rates/save" in source
+    assert "支付类型" in source
+    assert "RPC URL（EVM）" not in source
+    assert "Token 合约（USDT / USDC）" not in source
 
 
 def test_frontend_payment_styles_are_present():

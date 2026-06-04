@@ -8,6 +8,12 @@ import user_store
 from api_common import ok
 
 
+def _auto_order_kind(username, requested_kind, role):
+    if role == "admin":
+        return requested_kind or "renew"
+    return "renew" if user_store.get_user(username) else "create"
+
+
 def handle_user_post(clean, data, session):
     if clean == "/api/orders/create":
         role = session.get("role") or session.get("r")
@@ -17,7 +23,8 @@ def handle_user_post(clean, data, session):
         plan = plans_store.get_plan(data.get("plan_id", ""))
         if not plan:
             raise RuntimeError("plan not found")
-        order = orders_store.create_pending_order(username, data.get("kind", "renew"), plan, note=data.get("note", ""), operator=session.get("u", username))
+        kind = _auto_order_kind(username, data.get("kind", "renew"), role)
+        order = orders_store.create_pending_order(username, kind, plan, note=data.get("note", ""), operator=session.get("u", username))
         audit_log.write(session.get("u", username), "order.create", order.get("id", ""), {"username": username, "plan_id": plan.get("id")})
         return ok(order=order, orders=orders_store.list_orders(username=None if role == "admin" else username))
 

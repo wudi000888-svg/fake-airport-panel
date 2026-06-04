@@ -72,6 +72,44 @@ def test_payment_method_crud_and_user_visibility(payment_modules):
     assert store.list_methods(admin=True)[0]["enabled"] is False
 
 
+def test_minimal_payment_method_uses_builtin_defaults(payment_modules):
+    store = payment_modules["payments_store"]
+    method = store.upsert_method(
+        {
+            "asset": "USDT",
+            "chain": "bsc",
+            "address": "0x2222222222222222222222222222222222222222",
+        }
+    )
+
+    assert method["id"] == "usdt-bsc"
+    assert method["token_contract"] == "0x55d398326f99059ff775485246999027b3197955"
+    assert method["decimals"] == 18
+    assert method["confirmations_required"] == 12
+    assert method["sort"] == 110
+    assert method["rpc_url"] == "https://bsc-rpc.publicnode.com"
+    assert "https://bsc-dataseed.binance.org" in method["rpc_urls"]
+
+    public = store.list_methods(admin=False)[0]
+    assert public["id"] == "usdt-bsc"
+    assert "rpc_url" not in public
+    assert "rpc_urls" not in public
+    assert "token_contract" not in public
+
+    btc = store.upsert_method(
+        {
+            "asset": "BTC",
+            "chain": "bitcoin",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+        }
+    )
+    assert btc["id"] == "btc-main"
+    assert btc["decimals"] == 8
+    assert btc["confirmations_required"] == 3
+    assert btc["btc_api_url"] == "https://blockstream.info/api"
+    assert "https://mempool.space/api" in btc["btc_api_urls"]
+
+
 def test_payment_intent_creation_and_txid_uniqueness(payment_modules):
     store = payment_modules["payments_store"]
     payment = store.create_payment(
@@ -235,16 +273,16 @@ def test_payment_method_validation_and_qr_payloads(payment_modules):
     )
     assert payment_wallets.qr_payload(bnb, "0.100000000000000000") == bnb["address"]
 
-    with pytest.raises(RuntimeError, match="token contract"):
-        payment_wallets.normalize_method(
-            {
-                "id": "bad-usdt",
-                "asset": "USDT",
-                "chain": "ethereum",
-                "address": "0x2222222222222222222222222222222222222222",
-                "rpc_url": "https://rpc.example",
-            }
-        )
+    usdt_default = payment_wallets.normalize_method(
+        {
+            "id": "bad-usdt",
+            "asset": "USDT",
+            "chain": "ethereum",
+            "address": "0x2222222222222222222222222222222222222222",
+            "rpc_url": "https://rpc.example",
+        }
+    )
+    assert usdt_default["token_contract"] == "0xdac17f958d2ee523a2206206994597c13d831ec7"
 
 
 def test_payment_method_validation_rejects_bad_wallet_config(payment_modules):
@@ -273,25 +311,25 @@ def test_payment_method_validation_rejects_bad_wallet_config(payment_modules):
             }
         )
 
-    with pytest.raises(RuntimeError, match="rpc_url required"):
-        payment_wallets.normalize_method(
-            {
-                "id": "missing-rpc",
-                "asset": "ETH",
-                "chain": "ethereum",
-                "address": "0x2222222222222222222222222222222222222222",
-            }
-        )
+    eth_default = payment_wallets.normalize_method(
+        {
+            "id": "missing-rpc",
+            "asset": "ETH",
+            "chain": "ethereum",
+            "address": "0x2222222222222222222222222222222222222222",
+        }
+    )
+    assert eth_default["rpc_url"] == "https://ethereum-rpc.publicnode.com"
 
-    with pytest.raises(RuntimeError, match="btc_api_url required"):
-        payment_wallets.normalize_method(
-            {
-                "id": "missing-btc-api",
-                "asset": "BTC",
-                "chain": "bitcoin",
-                "address": "bc1qqqqqqqqqqqqqqqqqqqq",
-            }
-        )
+    btc_default = payment_wallets.normalize_method(
+        {
+            "id": "missing-btc-api",
+            "asset": "BTC",
+            "chain": "bitcoin",
+            "address": "bc1qqqqqqqqqqqqqqqqqqqq",
+        }
+    )
+    assert btc_default["btc_api_url"] == "https://blockstream.info/api"
 
     with pytest.raises(RuntimeError, match="Bitcoin address"):
         payment_wallets.normalize_method(
@@ -773,6 +811,32 @@ def test_rpc_and_http_json_send_user_agent(monkeypatch, payment_modules):
     assert seen[1]["User-agent"].startswith("fake-ui/")
 
 
+def test_rpc_call_falls_back_to_next_public_endpoint(monkeypatch, payment_modules):
+    verifier = importlib.import_module("payment_verifier")
+    seen_urls = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return json.dumps({"result": "0x2a"}).encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        seen_urls.append(request.full_url)
+        if len(seen_urls) == 1:
+            raise RuntimeError("HTTP Error 403: Forbidden")
+        return FakeResponse()
+
+    monkeypatch.setattr(verifier.urllib.request, "urlopen", fake_urlopen)
+
+    assert verifier.rpc_call(["https://blocked.example", "https://ok.example"], "eth_blockNumber", []) == "0x2a"
+    assert seen_urls == ["https://blocked.example", "https://ok.example"]
+
+
 def create_standard_order_and_method(monkeypatch):
     plans_store = importlib.import_module("plans_store")
     orders_store = importlib.import_module("orders_store")
@@ -892,6 +956,143 @@ def test_detected_payment_keeps_order_pending(payment_modules, monkeypatch):
     assert detected["status"] == "detected"
     assert order_after["status"] == "pending"
     assert order_after["payment_status"] == "detected"
+
+
+def test_refresh_without_txid_scans_erc20_transfer_and_completes_order(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payment_service = importlib.import_module("payment_service")
+    payment_verifier = importlib.import_module("payment_verifier")
+    payments_store = importlib.import_module("payments_store")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    block_number = 189
+    tx_hash = "0x" + "a" * 64
+    amount_units = 39000000
+    scanned = []
+
+    def fake_rpc(urls, rpc_method, params):
+        scanned.append((rpc_method, params))
+        if rpc_method == "eth_blockNumber":
+            return "0xc8"
+        if rpc_method == "eth_getLogs":
+            assert params[0]["topics"][2] == pad_topic_address(method["address"])
+            return [
+                {
+                    "transactionHash": tx_hash,
+                    "blockNumber": hex(block_number),
+                    "address": method["token_contract"],
+                    "topics": [
+                        payment_verifier.ERC20_TRANSFER_TOPIC,
+                        pad_topic_address("0x1111111111111111111111111111111111111111"),
+                        pad_topic_address(method["address"]),
+                    ],
+                    "data": "0x" + format(amount_units, "064x"),
+                }
+            ]
+        if rpc_method == "eth_getBlockByNumber":
+            return {"timestamp": "0x7fffffff"}
+        raise AssertionError(rpc_method)
+
+    monkeypatch.setattr(payment_verifier, "rpc_call", fake_rpc)
+
+    refreshed = payment_service.refresh_payment(payment["id"], "alice")
+
+    assert refreshed["status"] == "confirmed"
+    assert refreshed["txid"] == tx_hash
+    assert refreshed["detected_amount"] == "39.000000"
+    assert refreshed["confirmations"] == 12
+    assert orders_store.get_order(order["id"])["status"] == "completed"
+    assert payments_store.txid_used(tx_hash)
+    assert any(item[0] == "eth_getLogs" for item in scanned)
+
+
+def test_refresh_without_txid_marks_ambiguous_when_multiple_matching_transfers(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payment_service = importlib.import_module("payment_service")
+    payment_verifier = importlib.import_module("payment_verifier")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+
+    def log_for(tx_char):
+        return {
+            "transactionHash": "0x" + tx_char * 64,
+            "blockNumber": "0xbd",
+            "address": method["token_contract"],
+            "topics": [
+                payment_verifier.ERC20_TRANSFER_TOPIC,
+                pad_topic_address("0x1111111111111111111111111111111111111111"),
+                pad_topic_address(method["address"]),
+            ],
+            "data": "0x" + format(39000000, "064x"),
+        }
+
+    def fake_rpc(urls, rpc_method, params):
+        if rpc_method == "eth_blockNumber":
+            return "0xc8"
+        if rpc_method == "eth_getLogs":
+            return [log_for("a"), log_for("b")]
+        if rpc_method == "eth_getBlockByNumber":
+            return {"timestamp": "0x7fffffff"}
+        raise AssertionError(rpc_method)
+
+    monkeypatch.setattr(payment_verifier, "rpc_call", fake_rpc)
+
+    refreshed = payment_service.refresh_payment(payment["id"], "alice")
+
+    assert refreshed["status"] == "ambiguous"
+    assert "txid required" in refreshed["error"]
+    assert "ambiguous_at" in refreshed
+    order_after = orders_store.get_order(order["id"])
+    assert order_after["status"] == "pending"
+    assert order_after["payment_status"] == "ambiguous"
+
+
+def test_optional_txid_can_recover_cancelled_order_after_payment(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payment_service = importlib.import_module("payment_service")
+    user_admin = importlib.import_module("user_admin")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    user_admin.cancel_order(order["id"], operator="alice")
+    monkeypatch.setattr(
+        payment_service,
+        "verify_payment",
+        lambda p, m: {
+            "status": "confirmed",
+            "detected_amount": p["crypto_amount"],
+            "confirmations": 12,
+            "txid": p.get("txid", "0xtx"),
+            "error": "",
+        },
+    )
+
+    done = payment_service.submit_tx_and_verify(payment["id"], "0xtx", "alice")
+
+    assert done["status"] == "confirmed"
+    order_after = orders_store.get_order(order["id"])
+    assert order_after["status"] == "completed"
+    assert order_after["payment_status"] == "confirmed"
+
+
+def test_refresh_expired_payment_cancels_pending_order(payment_modules, monkeypatch):
+    orders_store = importlib.import_module("orders_store")
+    payments_store = importlib.import_module("payments_store")
+    payment_service = importlib.import_module("payment_service")
+
+    order, method = create_standard_order_and_method(monkeypatch)
+    payment = payment_service.create_payment_for_order(order["id"], method["id"], "alice")
+    payments_store.update_payment(payment["id"], expires_at="2000-01-01T00:00:00+00:00")
+
+    expired = payment_service.refresh_payment(payment["id"], "alice")
+
+    assert expired["status"] == "expired"
+    order_after = orders_store.get_order(order["id"])
+    assert order_after["status"] == "cancelled"
+    assert order_after["payment_status"] == "expired"
+    assert order_after["cancelled_by"] == "system"
 
 
 def test_create_payment_for_order_reuses_existing_active_payment(payment_modules, monkeypatch):
@@ -1044,17 +1245,47 @@ def test_payment_api_user_flow(payment_modules, monkeypatch):
     assert payload["payment"]["status"] == "confirmed"
 
 
+def test_payment_api_submit_txid_is_optional(payment_modules, monkeypatch):
+    api = importlib.import_module("api")
+    plans_store = importlib.import_module("plans_store")
+    payments_store = importlib.import_module("payments_store")
+    payment_service = importlib.import_module("payment_service")
+    user_admin = importlib.import_module("user_admin")
+
+    monkeypatch.setattr(user_admin, "enforce_users_now", lambda: "ok")
+    monkeypatch.setattr(
+        payment_service,
+        "verify_payment",
+        lambda p, m: {"status": "confirmed", "detected_amount": p["crypto_amount"], "confirmations": 12, "error": ""},
+    )
+    plans_store.upsert_plan({"id": "standard", "name": "Standard", "days": "30", "traffic_gb": "100", "price": "39"})
+    payments_store.upsert_method(
+        {
+            "asset": "USDT",
+            "chain": "bsc",
+            "address": "0x2222222222222222222222222222222222222222",
+        }
+    )
+
+    status, payload = api.handle_post("/api/orders/create", {"plan_id": "standard"}, user_session("alice"))
+    assert status == 200
+    order_id = payload["order"]["id"]
+    status, payload = api.handle_post("/api/payments/create", {"order_id": order_id, "method_id": "usdt-bsc"}, user_session("alice"))
+    assert status == 200
+
+    status, payload = api.handle_post("/api/payments/submit-tx", {"id": payload["payment"]["id"]}, user_session("alice"))
+    assert status == 200
+    assert payload["payment"]["status"] == "confirmed"
+
+
 def test_payment_method_admin_api(payment_modules):
     api = importlib.import_module("api")
     status, payload = api.handle_post(
         "/api/payment-methods/save",
         {
-            "id": "btc-main",
             "asset": "BTC",
             "chain": "bitcoin",
             "address": "bc1qqqqqqqqqqqqqqqqqqqq",
-            "btc_api_url": "https://blockstream.info/api",
-            "confirmations_required": "3",
         },
         admin_session_for_payments(),
     )
@@ -1119,6 +1350,41 @@ def test_user_order_create_ignores_body_username(payment_modules, monkeypatch):
 
     assert status == 200
     assert payload["order"]["username"] == "alice"
+    assert payload["order"]["kind"] == "create"
+
+
+def test_user_order_create_auto_renews_existing_user(payment_modules, monkeypatch):
+    api = importlib.import_module("api")
+    plans_store = importlib.import_module("plans_store")
+    user_admin = importlib.import_module("user_admin")
+    user_store = importlib.import_module("user_store")
+
+    monkeypatch.setattr(user_admin, "enforce_users_now", lambda: "ok")
+    plans_store.upsert_plan({"id": "standard", "name": "Standard", "days": "30", "traffic_gb": "100", "price": "39"})
+    user_store.save_users(
+        {
+            "version": 1,
+            "users": {
+                "alice": {
+                    "enabled": True,
+                    "role": "user",
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                    "quota_bytes": 0,
+                    "used_bytes": 0,
+                }
+            },
+        }
+    )
+
+    status, payload = api.handle_post(
+        "/api/orders/create",
+        {"plan_id": "standard", "kind": "create", "username": "bob"},
+        user_session("alice"),
+    )
+
+    assert status == 200
+    assert payload["order"]["username"] == "alice"
+    assert payload["order"]["kind"] == "renew"
 
 
 def test_user_cannot_save_payment_methods(payment_modules):
