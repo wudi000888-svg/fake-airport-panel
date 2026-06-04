@@ -16,6 +16,7 @@ SECRET_QUERY_RE = re.compile(r"(?i)([?&](?:key|token|apikey|api_key)=)([^&\s]+)"
 EVM_SCAN_BLOCK_LOOKBACK = 200000
 EVM_SCAN_MAX_BLOCK_RANGE = 50000
 EVM_CHAIN_BLOCK_SECONDS = {"bsc": 3, "ethereum": 12}
+EVM_MIN_SCAN_BLOCKS = {"bsc": 6000, "ethereum": 1200}
 PAYMENT_TIME_SKEW_SECONDS = 60
 PAYMENT_RECOVERY_DAYS = 7
 
@@ -115,7 +116,9 @@ def _scan_from_block(payment, method, current_block):
     chain = str(method.get("chain") or "").strip().lower()
     block_seconds = EVM_CHAIN_BLOCK_SECONDS.get(chain, 6)
     estimated_blocks = max(1, (seconds // block_seconds) + 20)
-    return max(fallback_from_block, current_block - estimated_blocks)
+    min_scan_blocks = EVM_MIN_SCAN_BLOCKS.get(chain, 1200)
+    scan_blocks = max(estimated_blocks, min_scan_blocks)
+    return max(fallback_from_block, current_block - scan_blocks)
 
 
 def _payment_expired(payment):
