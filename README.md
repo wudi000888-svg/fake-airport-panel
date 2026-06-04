@@ -248,5 +248,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-local.ps1
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 模块边界和请求流 |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | 本地测试、Docker、生产上线检查 |
+| [PROJECT_MEMORY.md](PROJECT_MEMORY.md) | 新对话或新维护者的项目交接记忆 |
+| [NEXT_STEPS.md](NEXT_STEPS.md) | 后续版本路线和任务队列 |
+| [docs/GITHUB_RELEASE_FLOW.md](docs/GITHUB_RELEASE_FLOW.md) | GitHub 上线、发版和回滚流程 |
 | [SECURITY.md](SECURITY.md) | 敏感信息和安全建议 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献和测试规范 |
