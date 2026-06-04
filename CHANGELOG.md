@@ -1,10 +1,15 @@
 # 更新日志
 
-## Unreleased
+## v2.0.0
 
 | 类型 | 内容 |
 | --- | --- |
-| 待定 | 下一版本变更将在这里记录 |
+| 前端 | 重构为 ES modules，新增移动优先 shell、底部导航、用户订单/付款分区和管理员卡片化运营页 |
+| 数据 | 新增 SQLite schema、repository、JSON 导入、SQLite 导出回 JSON 和 `FAKE_UI_STORE=sqlite` 可切换运行模式 |
+| 缓存 | 新增线程安全 TTL cache，并提供管理员缓存状态和清理 API |
+| 测试 | 新增 v2 API、数据库、缓存、前端结构和 demo 数据一致性测试 |
+| 部署 | 新增新加坡测试环境破坏性重置脚本，默认拒绝执行，需显式 `FAKE_UI_ALLOW_TEST_RESET=singapore` |
+| 文档 | 更新 README 首屏定位，标明 v2.0.0 商业化移动端、SQLite 和缓存能力 |
 
 ## v1.2.0
 
