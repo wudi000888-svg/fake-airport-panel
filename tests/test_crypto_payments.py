@@ -405,3 +405,151 @@ def test_payment_rates_reject_invalid_amounts_and_decimals(payment_modules):
 
     with pytest.raises(RuntimeError, match="decimals"):
         payment_rates.crypto_amount_for_usd("1", "BTC", 19)
+
+
+def pad_topic_address(addr):
+    return "0x" + ("0" * 24) + addr.lower().replace("0x", "")
+
+
+def test_evm_erc20_and_native_verification_parsers(payment_modules):
+    verifier = importlib.import_module("payment_verifier")
+    receiver = "0x2222222222222222222222222222222222222222"
+    sender = "0x1111111111111111111111111111111111111111"
+    contract = "0xdac17f958d2ee523a2206206994597c13d831ec7"
+    transfer_topic = verifier.ERC20_TRANSFER_TOPIC
+    receipt = {
+        "blockNumber": "0x64",
+        "logs": [
+            {
+                "address": contract,
+                "topics": [transfer_topic, pad_topic_address(sender), pad_topic_address(receiver)],
+                "data": "0x" + format(39000000, "064x"),
+            }
+        ],
+    }
+    result = verifier.verify_evm_erc20_receipt(
+        receipt,
+        current_block=120,
+        token_contract=contract,
+        to_address=receiver,
+        required_amount="39.000000",
+        decimals=6,
+        confirmations_required=12,
+    )
+    assert result["status"] == "confirmed"
+    assert result["detected_amount"] == "39.000000"
+    assert result["confirmations"] == 21
+
+    tx = {"to": receiver, "value": "0x" + format(13000000000000000, "x"), "blockNumber": "0x64"}
+    native = verifier.verify_evm_native_tx(
+        tx,
+        current_block=120,
+        to_address=receiver,
+        required_amount="0.013000000000000000",
+        decimals=18,
+        confirmations_required=12,
+    )
+    assert native["status"] == "confirmed"
+
+
+def test_btc_verification_parser(payment_modules):
+    verifier = importlib.import_module("payment_verifier")
+    tx = {
+        "status": {"confirmed": True, "block_height": 100},
+        "vout": [
+            {"scriptpubkey_address": "bc1qexample", "value": 39000},
+            {"scriptpubkey_address": "bc1qother", "value": 1000},
+        ],
+    }
+    result = verifier.verify_btc_tx(
+        tx,
+        tip_height=103,
+        to_address="bc1qexample",
+        required_amount="0.00039000",
+        confirmations_required=3,
+    )
+    assert result["status"] == "confirmed"
+    assert result["detected_amount"] == "0.00039000"
+    assert result["confirmations"] == 4
+
+
+def test_evm_verification_parser_edge_cases(payment_modules):
+    verifier = importlib.import_module("payment_verifier")
+    receiver = "0x2222222222222222222222222222222222222222"
+    sender = "0x1111111111111111111111111111111111111111"
+    contract = "0xdac17f958d2ee523a2206206994597c13d831ec7"
+    other_contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    receipt = {
+        "blockNumber": "0x64",
+        "logs": [
+            {
+                "address": contract,
+                "topics": [verifier.ERC20_TRANSFER_TOPIC, pad_topic_address(sender), pad_topic_address(receiver)],
+                "data": "0x" + format(39000000, "064x"),
+            }
+        ],
+    }
+
+    wrong_token = verifier.verify_evm_erc20_receipt(
+        receipt,
+        current_block=120,
+        token_contract=other_contract,
+        to_address=receiver,
+        required_amount="39.000000",
+        decimals=6,
+        confirmations_required=12,
+    )
+    assert wrong_token["status"] == "failed"
+    assert wrong_token["detected_amount"] == "0.000000"
+    assert wrong_token["error"]
+
+    not_enough_confirmations = verifier.verify_evm_erc20_receipt(
+        receipt,
+        current_block=105,
+        token_contract=contract,
+        to_address=receiver,
+        required_amount="39.000000",
+        decimals=6,
+        confirmations_required=12,
+    )
+    assert not_enough_confirmations["status"] == "detected"
+    assert not_enough_confirmations["confirmations"] == 6
+
+    wrong_native_to = verifier.verify_evm_native_tx(
+        {"to": sender, "value": "0x" + format(13000000000000000, "x"), "blockNumber": "0x64"},
+        current_block=120,
+        to_address=receiver,
+        required_amount="0.013000000000000000",
+        decimals=18,
+        confirmations_required=12,
+    )
+    assert wrong_native_to["status"] == "failed"
+    assert wrong_native_to["error"]
+
+
+def test_btc_verification_parser_edge_cases(payment_modules):
+    verifier = importlib.import_module("payment_verifier")
+    tx = {
+        "status": {"confirmed": True, "block_height": 100},
+        "vout": [{"scriptpubkey_address": "bc1qexample", "value": 39000}],
+    }
+
+    not_enough_confirmations = verifier.verify_btc_tx(
+        tx,
+        tip_height=101,
+        to_address="bc1qexample",
+        required_amount="0.00039000",
+        confirmations_required=3,
+    )
+    assert not_enough_confirmations["status"] == "detected"
+    assert not_enough_confirmations["confirmations"] == 2
+
+    low_amount = verifier.verify_btc_tx(
+        tx,
+        tip_height=103,
+        to_address="bc1qexample",
+        required_amount="0.00040000",
+        confirmations_required=3,
+    )
+    assert low_amount["status"] == "failed"
+    assert low_amount["detected_amount"] == "0.00039000"
