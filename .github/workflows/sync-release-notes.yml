@@ -1,6 +1,12 @@
 name: Sync Release Notes
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/releases/*.md"
+      - ".github/workflows/sync-release-notes.yml"
   workflow_dispatch:
     inputs:
       tag:
@@ -21,13 +27,26 @@ jobs:
       - name: Update release body
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag || '' }}
         run: |
-          notes="docs/releases/${TAG}.md"
-          if [ ! -f "$notes" ]; then
-            echo "Release notes not found: $notes" >&2
-            exit 1
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tags="$INPUT_TAG"
+          else
+            tags="$(find docs/releases -maxdepth 1 -name 'v*.md' -printf '%f\n' | sed 's/\.md$//' | sort)"
           fi
-          gh release edit "$TAG" \
-            --title "fake-ui ${TAG}" \
-            --notes-file "$notes"
+
+          for tag in $tags; do
+            notes="docs/releases/${tag}.md"
+            if [ ! -f "$notes" ]; then
+              echo "Release notes not found: $notes" >&2
+              exit 1
+            fi
+            if ! gh release view "$tag" >/dev/null 2>&1; then
+              echo "Release not found, skipping: $tag"
+              continue
+            fi
+            gh release edit "$tag" \
+              --title "fake-ui ${tag}" \
+              --notes-file "$notes"
+          done
