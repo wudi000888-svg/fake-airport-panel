@@ -47,9 +47,11 @@ export function layout(content) {
           </div>
           <span>单机多出口代理编排系统</span>
         </div>
-        <div class="nav-stack">${nav}</div>
-        <div class="side-nav-footer">
+        <div class="side-nav-scroll">
+          <div class="nav-stack">${nav}</div>
           ${secondary ? `<div class="nav-stack secondary">${secondary}</div>` : ""}
+        </div>
+        <div class="side-nav-footer">
           <div class="side-nav-meta">
             <span>${esc(username || role)}</span>
             <span>v${esc(version)}</span>

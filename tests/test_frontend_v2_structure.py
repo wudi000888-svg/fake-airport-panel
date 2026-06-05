@@ -133,10 +133,13 @@ def test_frontend_v2_layout_prevents_dashboard_overflow():
 
     assert "version-chip" in layout_js
     assert "state.shell?.version" in layout_js
+    assert "side-nav-scroll" in layout_js
     assert "side-nav-footer" in layout_js
     assert "overflow-x: hidden" in layout_css
     assert "overflow-y: auto" in layout_css
+    assert ".side-nav-scroll" in layout_css
     assert ".side-nav-footer" in layout_css
+    assert "margin-top: auto" not in layout_css
     assert ".version-chip" in layout_css
     assert "max-width:" in layout_css
     assert ".workspace-v2" in layout_css
