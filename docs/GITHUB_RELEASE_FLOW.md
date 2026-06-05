@@ -123,11 +123,7 @@ git tag -a vX.Y.Z -m "fake-ui vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-Then open GitHub Releases:
-
-```text
-https://github.com/wudi000888-svg/fake-ui/releases/new?tag=vX.Y.Z
-```
+Pushing the tag starts `.github/workflows/release.yml`. The workflow creates the GitHub Release, uploads a public source archive, and reads `docs/releases/vX.Y.Z.md` when it exists.
 
 Release notes should include:
 
