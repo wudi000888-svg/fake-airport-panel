@@ -1,8 +1,10 @@
 import shutil
 import tarfile
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 
+import store_facade
 from panel_config import BACKUP_DIR, PANEL_DIR
 from json_store import save_json
 
@@ -20,8 +22,12 @@ BACKUP_FILES = [
     "sub_token.txt",
     "audit.log",
     "subscription_access.log",
+    "fake-ui.db",
+    "fake-ui.db-wal",
+    "fake-ui.db-shm",
 ]
 BACKUP_NAMES = BACKUP_FILES
+REQUIRED_META = "backup.json"
 
 
 def now_stamp():
@@ -29,6 +35,8 @@ def now_stamp():
 
 
 def create_backup(reason="manual", keep=20):
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     work = BACKUP_DIR / f"panel-backup-{now_stamp()}"
     work.mkdir(parents=True, exist_ok=False)
@@ -46,7 +54,7 @@ def create_backup(reason="manual", keep=20):
         tar.add(work, arcname=work.name)
     shutil.rmtree(work)
     prune_backups(keep)
-    return {"path": str(archive), "meta": meta}
+    return {"name": archive.name, "path": str(archive), "size": archive.stat().st_size, "meta": meta}
 
 
 def list_backups(limit=50):
@@ -54,6 +62,93 @@ def list_backups(limit=50):
         return []
     items = sorted(BACKUP_DIR.glob("panel-backup-*.tgz"), key=lambda p: p.stat().st_mtime, reverse=True)
     return [{"name": p.name, "path": str(p), "size": p.stat().st_size, "mtime": p.stat().st_mtime} for p in items[: int(limit or 50)]]
+
+
+def backup_path(name):
+    name = Path(str(name or "")).name
+    if not name.startswith("panel-backup-") or not name.endswith(".tgz"):
+        raise RuntimeError("backup name is invalid")
+    path = (BACKUP_DIR / name).resolve()
+    root = BACKUP_DIR.resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        raise RuntimeError("backup path is invalid")
+    if not path.exists():
+        raise RuntimeError("backup not found")
+    return path
+
+
+def read_backup_bytes(name):
+    return backup_path(name).read_bytes()
+
+
+def _safe_member_name(member):
+    name = str(member.name or "").replace("\\", "/")
+    parts = [part for part in name.split("/") if part]
+    if len(parts) < 2:
+        return ""
+    if any(part in (".", "..") for part in parts):
+        raise RuntimeError("backup archive contains unsafe paths")
+    return parts[-1]
+
+
+def _extract_backup_files(raw):
+    allowed = set(BACKUP_FILES + [REQUIRED_META])
+    found_meta = False
+    archive_root = ""
+    files = {}
+    try:
+        with tarfile.open(fileobj=BytesIO(raw), mode="r:gz") as tar:
+            for member in tar.getmembers():
+                if not archive_root:
+                    archive_root = str(member.name or "").replace("\\", "/").split("/", 1)[0]
+                if member.isdir():
+                    continue
+                name = _safe_member_name(member)
+                if not name:
+                    continue
+                if name not in allowed:
+                    continue
+                if name == REQUIRED_META:
+                    found_meta = True
+                source = tar.extractfile(member)
+                if source is not None:
+                    files[name] = source.read()
+    except tarfile.TarError as exc:
+        raise RuntimeError("backup archive is invalid") from exc
+    if not found_meta:
+        raise RuntimeError("backup metadata missing")
+    return archive_root, files
+
+
+def restore_backup_archive(raw, operator="admin"):
+    if not raw:
+        raise RuntimeError("backup archive is empty")
+    create_backup(reason=f"pre-restore by {operator}", keep=30)
+    archive_root, files = _extract_backup_files(raw)
+    restored = []
+    for name, content in files.items():
+        if name == REQUIRED_META:
+            continue
+        if name not in BACKUP_FILES:
+            continue
+        target = PANEL_DIR / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        if name.endswith(".json") or name.endswith(".txt") or name.endswith(".log"):
+            target.chmod(0o600)
+        restored.append(name)
+    marker = BACKUP_DIR / f"imported-{now_stamp()}.tgz"
+    marker.write_bytes(raw)
+    archive_name = f"{archive_root}.tgz" if archive_root else marker.name
+    if store_facade.use_sqlite():
+        store_facade.ensure_sqlite()
+    return {
+        "restored": {"name": archive_name, "path": str(marker), "size": marker.stat().st_size},
+        "files": restored,
+        "safety_backup": list_backups(1)[0] if list_backups(1) else None,
+    }
 
 
 def prune_backups(keep=20):

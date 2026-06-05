@@ -1,5 +1,11 @@
 export function formData(form) {
-  return Object.fromEntries(new FormData(form).entries());
+  const fd = new FormData(form);
+  const data = Object.fromEntries(fd.entries());
+  form.querySelectorAll('input[type="checkbox"][name]').forEach((input) => {
+    const values = fd.getAll(input.name);
+    data[input.name] = values;
+  });
+  return data;
 }
 
 

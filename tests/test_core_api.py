@@ -127,6 +127,82 @@ def test_user_create_and_node_assignment(app_modules):
     assert any(item["username"] == "alice" for item in payload["users"])
 
 
+def test_admin_can_change_user_plan_and_exact_nodes(app_modules, monkeypatch):
+    api = app_modules["api"]
+    user_store = app_modules["user_store"]
+    node_catalog = app_modules["node_catalog"]
+
+    monkeypatch.setattr(app_modules["operations_service"], "apply_node_exit_info", lambda node: node)
+    api.handle_post(
+        "/api/plans/save",
+        {
+            "id": "vip",
+            "name": "VIP",
+            "days": "60",
+            "traffic_gb": "200",
+            "price": "9.9",
+            "node_groups": "vip",
+            "sort": "30",
+            "enabled": True,
+        },
+        admin_session(app_modules),
+    )
+    status, payload = api.handle_post("/api/nodes/add-vless", {}, admin_session(app_modules))
+    assert status == 200
+    extra_node_id = payload["node"]["id"]
+
+    api.handle_post(
+        "/api/users/create",
+        {"username": "managed", "days": "7", "panel_password": "password123", "traffic_gb": "5"},
+        admin_session(app_modules),
+    )
+
+    status, payload = api.handle_post(
+        "/api/users/update",
+        {
+            "username": "managed",
+            "plan_id": "vip",
+            "days": "60",
+            "quota_gb": "200",
+            "node_ids": [extra_node_id, "hy2-main"],
+            "note": "upgraded",
+            "enabled": True,
+        },
+        admin_session(app_modules),
+    )
+    assert status == 200
+    user = user_store.get_user("managed")
+    assert user["plan_id"] == "vip"
+    assert user["node_groups"] == ["vip"]
+    assert user["quota_bytes"] == 200 * 1024 * 1024 * 1024
+    assert user["node_ids"] == [extra_node_id, "hy2-main"]
+    assert user["note"] == "upgraded"
+    assert [node["id"] for node in node_catalog.nodes_for_user(user, include_disabled=False)] == [extra_node_id, "hy2-main"]
+    assert payload["user"]["effective_node_ids"] == [extra_node_id, "hy2-main"]
+
+    status, payload = api.handle_post(
+        "/api/users/update",
+        {"username": "managed", "plan_id": "starter", "quota_gb": "", "enabled": True},
+        admin_session(app_modules),
+    )
+    assert status == 200
+    user = user_store.get_user("managed")
+    assert user["plan_id"] == "starter"
+    assert user["quota_bytes"] == 100 * 1024 * 1024 * 1024
+
+    status, payload = api.handle_post(
+        "/api/users/update",
+        {"username": "managed", "node_ids": "", "enabled": True},
+        admin_session(app_modules),
+    )
+    assert status == 200
+    user = user_store.get_user("managed")
+    assert "node_ids" not in user
+    assert payload["user"]["effective_node_ids"]
+    assert "vless-main" in payload["user"]["effective_node_ids"]
+    assert "hy2-main" in payload["user"]["effective_node_ids"]
+
+
 def test_node_add_disable_delete_flow(app_modules, monkeypatch):
     api = app_modules["api"]
     node_catalog = app_modules["node_catalog"]
@@ -333,3 +409,48 @@ def test_qr_png_generation():
     raw = qr_service.qr_png_for_link("vless://example")
     assert raw.startswith(b"\x89PNG\r\n\x1a\n")
     assert len(raw) > 100
+
+
+def test_backup_export_and_restore_round_trip(app_modules):
+    api = app_modules["api"]
+    backup_manager = app_modules["backup_manager"]
+    user_store = app_modules["user_store"]
+    user_admin = importlib.import_module("user_admin")
+    sync_calls = []
+    user_admin.enforce_users_now = lambda: sync_calls.append("sync") or "ok"
+
+    api.handle_post(
+        "/api/users/create",
+        {"username": "before", "days": "7", "panel_password": "password123", "traffic_gb": "5"},
+        admin_session(app_modules),
+    )
+    backup = backup_manager.create_backup("round-trip")
+
+    api.handle_post(
+        "/api/users/create",
+        {"username": "after", "days": "7", "panel_password": "password123", "traffic_gb": "5"},
+        admin_session(app_modules),
+    )
+    assert "after" in user_store.load_users()["users"]
+
+    exported = backup_manager.read_backup_bytes(backup["name"])
+    assert exported.startswith(b"\x1f\x8b")
+
+    restored = backup_manager.restore_backup_archive(exported, operator="admin")
+    assert restored["restored"]["name"] == backup["name"]
+    users = user_store.load_users()["users"]
+    assert "before" in users
+    assert "after" not in users
+
+    status, payload = api.handle_get(f"/api/backups/download?name={backup['name']}", admin_session(app_modules))
+    assert status == 200
+    assert payload["filename"] == backup["name"]
+    assert payload["content"].startswith(b"\x1f\x8b")
+
+    status, payload = api.handle_post(
+        "/api/backups/upload",
+        {"filename": backup["name"], "content_b64": __import__("base64").b64encode(exported).decode()},
+        admin_session(app_modules),
+    )
+    assert status == 200
+    assert sync_calls

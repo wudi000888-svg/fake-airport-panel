@@ -87,8 +87,7 @@ export async function handleUserNodeForm(form, data, { runAction }) {
   if (form.dataset.form === "user-edit") {
     await runAction(async () => {
       const payload = { ...data };
-      if (payload.action !== "set_nodes") delete payload.node_ids;
-      await post("/api/users/action", payload);
+      await post("/api/users/update", payload);
       return "用户已保存";
     });
     return true;

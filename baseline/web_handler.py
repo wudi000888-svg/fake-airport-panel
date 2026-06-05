@@ -92,11 +92,14 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
-    def respond_bytes(self, content, content_type):
+    def respond_bytes(self, content, content_type, headers=None):
+        headers = headers or {}
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in headers.items():
+            self.send_header(str(k), str(v).encode("ascii", "ignore").decode("ascii"))
         self.end_headers()
         self.wfile.write(content)
 

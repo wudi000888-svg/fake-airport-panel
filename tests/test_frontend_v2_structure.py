@@ -34,6 +34,7 @@ def test_frontend_v2_modules_exist_and_index_uses_module_entry():
         "js/components/layout.js",
         "js/components/login.js",
         "js/pages/registry.js",
+        "js/pages/admin/backups.js",
         "js/pages/admin/simple.js",
         "css/tokens.css",
         "css/layout.css",
@@ -119,6 +120,15 @@ def test_frontend_v2_admin_pages_use_task_cards_and_bottom_sheets():
     assert 'data-form="plan-save"' in plans
     assert 'data-action="plan-edit"' in plans
     assert 'data-action="plan-action"' in plans
+    users = (assets / "users.js").read_text(encoding="utf-8")
+    assert 'data-node-picker="user-edit"' in users
+    assert 'type="checkbox"' in users
+    assert 'name="node_ids"' in users
+    assert "节点 ID" not in users
+    backups = (assets / "backups.js").read_text(encoding="utf-8")
+    assert 'data-action="backup-create"' in backups
+    assert 'data-action="backup-download"' in backups
+    assert 'data-form="backup-import"' in backups
 
 
 def test_frontend_v2_spa_wires_commercial_actions():
@@ -133,6 +143,9 @@ def test_frontend_v2_spa_wires_commercial_actions():
         "/api/payment-methods/action",
         "/api/plans/save",
         "/api/plans/action",
+        "/api/users/update",
+        "/api/backups/create",
+        "/api/backups/upload",
         "/api/cache/clear",
     ]:
         assert endpoint in action_source
@@ -147,6 +160,8 @@ def test_frontend_v2_spa_wires_commercial_actions():
         "plan-create-sheet",
         "plan-edit",
         "plan-action",
+        "backup-create",
+        "backup-download",
         "payment-method-action",
         "cache-clear",
     ]:

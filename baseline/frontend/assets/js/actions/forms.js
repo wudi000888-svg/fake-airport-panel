@@ -63,14 +63,18 @@ export function fillUserForm(root, user) {
   const form = root.querySelector('form[data-form="user-edit"]');
   fillForm(form, {
     username: user?.username || "",
-    action: "extend",
+    enabled: user?.enabled === false ? "false" : "true",
     plan_id: user?.plan_id || "",
-    days: "30",
+    days: "",
     quota_gb: "",
-    node_ids: (user?.node_ids || []).join(","),
-  }, ["username", "action", "plan_id", "days", "quota_gb", "node_ids"]);
+    note: user?.note || "",
+  }, ["username", "enabled", "plan_id", "days", "quota_gb", "note"]);
+  const selected = new Set(user?.node_ids || []);
+  form?.querySelectorAll('input[type="checkbox"][name="node_ids"]').forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
   form?.scrollIntoView({ behavior: "smooth", block: "start" });
-  form?.elements.action?.focus();
+  form?.elements.enabled?.focus();
 }
 
 

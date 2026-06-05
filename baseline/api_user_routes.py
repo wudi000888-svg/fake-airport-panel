@@ -1,4 +1,5 @@
 import audit_log
+import dashboard_service
 import operations_service as ops
 import orders_store
 import plans_store
@@ -66,6 +67,11 @@ def handle_user_post(clean, data, session):
             data.get("node_ids", ""),
         )
         return ok(users=ops.list_users())
+
+    if clean == "/api/users/update":
+        username = data.get("username", "")
+        user = user_admin.update_airport_user(username, data, operator=session.get("u", "admin"))
+        return ok(user=dashboard_service.user_summary(username, user), users=ops.list_users())
 
     if clean == "/api/users/reset-subscription":
         token = user_admin.reset_user_subscription(data.get("username", ""), operator=session.get("u", "admin"))

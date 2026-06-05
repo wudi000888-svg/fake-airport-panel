@@ -17,7 +17,9 @@ from http_utils import api_error
 
 
 def handle_get(path, session):
-    clean = urllib.parse.urlparse(path).path
+    parsed = urllib.parse.urlparse(path)
+    clean = parsed.path
+    query = urllib.parse.parse_qs(parsed.query)
 
     v2_result = api_v2_routes.handle_get(clean, session)
     if v2_result is not None:
@@ -81,6 +83,12 @@ def handle_get(path, session):
         if (err := require_admin(session)):
             return err
         return ok(backups=backup_manager.list_backups(100))
+
+    if clean == "/api/backups/download":
+        if (err := require_admin(session)):
+            return err
+        name = (query.get("name") or [""])[0]
+        return ok(filename=name, content=backup_manager.read_backup_bytes(name), content_type="application/gzip")
 
     if clean == "/api/links":
         role = session.get("role") or session.get("r")

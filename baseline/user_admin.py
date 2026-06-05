@@ -241,6 +241,74 @@ def airport_user_action(username, action, days="30", quota_gb="", plan_id="", op
     return True
 
 
+def update_airport_user(username, updates, operator="admin"):
+    username = str(username or "").strip()
+    data = user_store.load_users()
+    users = data.setdefault("users", {})
+
+    if username not in users:
+        raise RuntimeError("用户不存在。")
+
+    user = users[username]
+    plan_id = str((updates or {}).get("plan_id", "") or "").strip()
+    plan = plans_store.get_plan(plan_id) if plan_id else None
+
+    if plan_id:
+        if not plan:
+            raise RuntimeError("套餐不存在。")
+        user["plan_id"] = plan.get("id", "")
+        user["node_groups"] = plan.get("node_groups", ["default"])
+
+    if "enabled" in updates:
+        enabled = updates.get("enabled")
+        if isinstance(enabled, str):
+            enabled = enabled.lower() not in {"0", "false", "no", "off"}
+        user["enabled"] = bool(enabled)
+
+    if "note" in updates:
+        user["note"] = str(updates.get("note") or "").strip()
+
+    days = str(updates.get("days", "") or "").strip()
+    if days:
+        days_int = int(days)
+        if days_int <= 0:
+            raise RuntimeError("有效期天数必须大于 0。")
+        user["expires_at"] = user_store.make_expiry(days_int)
+
+    quota_gb = updates.get("quota_gb", None)
+    if quota_gb in (None, "") and plan:
+        quota_gb = plan.get("traffic_gb", "")
+    if quota_gb not in (None, ""):
+        user["quota_bytes"] = user_store.traffic_gb_to_bytes(quota_gb)
+        user["quota_exceeded"] = (
+            int(user.get("quota_bytes", 0) or 0) > 0
+            and int(user.get("used_bytes", 0) or 0) >= int(user.get("quota_bytes", 0) or 0)
+        )
+
+    if "node_ids" in updates:
+        selected_ids = normalize_node_ids(updates.get("node_ids"))
+        if selected_ids:
+            user["node_ids"] = selected_ids
+        else:
+            user.pop("node_ids", None)
+
+    user_store.save_users(data)
+    enforce_users_now()
+    audit_log.write(
+        operator,
+        "user.update",
+        username,
+        {
+            "plan_id": user.get("plan_id", ""),
+            "node_groups": user.get("node_groups", []),
+            "node_ids": user.get("node_ids", []),
+            "quota_bytes": user.get("quota_bytes", 0),
+            "enabled": user.get("enabled", True),
+        },
+    )
+    return user
+
+
 def user_self_update_password(username, old_password, new_password):
     if len(new_password or "") < 8:
         raise RuntimeError("new password must be at least 8 characters")

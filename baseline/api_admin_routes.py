@@ -1,9 +1,12 @@
+import base64
+
 import audit_log
 import backup_manager
 import hy2_panel
 import node_catalog
 import operations_service as ops
 import plans_store
+import user_admin
 import xray_panel
 from api_common import ok
 
@@ -65,5 +68,16 @@ def handle_admin_post(clean, data, session):
         backup = backup_manager.create_backup(reason=data.get("reason", "manual"))
         audit_log.write(session.get("u", "admin"), "backup.create", backup.get("path", ""))
         return ok(backup=backup, backups=backup_manager.list_backups(100))
+
+    if clean == "/api/backups/upload":
+        raw_b64 = str(data.get("content_b64", "") or "")
+        try:
+            raw = base64.b64decode(raw_b64, validate=True)
+        except Exception as exc:
+            raise RuntimeError("备份文件内容无效。") from exc
+        result = backup_manager.restore_backup_archive(raw, operator=session.get("u", "admin"))
+        user_admin.enforce_users_now()
+        audit_log.write(session.get("u", "admin"), "backup.restore", result.get("restored", {}).get("name", ""))
+        return ok(result=result, backups=backup_manager.list_backups(100))
 
     return None

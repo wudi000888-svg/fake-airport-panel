@@ -16,7 +16,42 @@ function matchesUser(user, query) {
 }
 
 
-function userCard(user) {
+function nodeLabel(node) {
+  return node.display_name || node.name || node.id || "";
+}
+
+
+function userNodeText(user, nodes) {
+  const ids = user.effective_node_ids || user.node_ids || [];
+  if (!ids.length) return "按套餐默认节点";
+  const byId = Object.fromEntries(nodes.map((node) => [node.id, nodeLabel(node)]));
+  return ids.map((id) => byId[id] || id).join("、");
+}
+
+
+function nodePicker(nodes, user = {}) {
+  const selected = new Set(user.node_ids || []);
+  return `
+    <fieldset class="node-picker" data-node-picker="user-edit">
+      <legend>可用节点</legend>
+      <p>不勾选时使用套餐默认节点组；勾选后只允许这些节点。</p>
+      <div class="node-picker-grid">
+        ${nodes.map((node) => `
+          <label class="check-card">
+            <input type="checkbox" name="node_ids" value="${esc(node.id || "")}" ${selected.has(node.id) ? "checked" : ""}>
+            <span>
+              <strong>${esc(nodeLabel(node))}</strong>
+              <small>${esc(node.kind || "")} · ${esc(node.group || "default")} · ${esc(node.enabled === false ? "停用" : "启用")}</small>
+            </span>
+          </label>
+        `).join("") || `<div class="empty">暂无节点</div>`}
+      </div>
+    </fieldset>
+  `;
+}
+
+
+function userCard(user, nodes) {
   return `
     <article class="admin-card">
       <div>
@@ -24,6 +59,7 @@ function userCard(user) {
         <span>${esc(user.status || "")} · ${esc(user.quota_status || "")}</span>
       </div>
       <p>${esc(user.plan_name || user.plan_id || "自定义套餐")} · ${esc(user.metrics?.days_left ?? "-")} 天</p>
+      <p>节点：${esc(userNodeText(user, nodes))}</p>
       <div class="admin-actions">
         <button class="secondary" data-action="user-edit" data-user="${esc(user.username)}" type="button">编辑</button>
         <button class="secondary" data-action="copy-subscription" data-text="${esc(user.raw_subscription_url || user.subscription_url || "")}" type="button">复制订阅</button>
@@ -41,6 +77,7 @@ function userCard(user) {
 export function renderAdminUsers(data = {}) {
   const users = data.users || [];
   const plans = (data.plans || []).filter((plan) => plan.enabled !== false);
+  const nodes = data.nodes || [];
   const query = data.filters?.users || "";
   const visibleUsers = users.filter((user) => matchesUser(user, query));
   const planOptions = plans.map((plan) => `<option value="${esc(plan.id || "")}">${esc(plan.name || plan.id || "")}</option>`).join("");
@@ -74,11 +111,10 @@ export function renderAdminUsers(data = {}) {
         <div><strong>快速编辑用户</strong><span>续费、改套餐、配额和精确授权节点。</span></div>
         <form class="form-grid compact-form" data-form="user-edit">
           <label>用户名<input name="username" readonly></label>
-          <label>操作
-            <select name="action">
-              <option value="extend">续费/改套餐</option>
-              <option value="set_quota">设置流量</option>
-              <option value="set_nodes">设置节点</option>
+          <label>状态
+            <select name="enabled">
+              <option value="true">启用</option>
+              <option value="false">禁用</option>
             </select>
           </label>
           <label>套餐
@@ -87,9 +123,10 @@ export function renderAdminUsers(data = {}) {
               ${planOptions}
             </select>
           </label>
-          <label>天数<input name="days" inputmode="numeric" value="30"></label>
-          <label>流量 GB<input name="quota_gb" inputmode="decimal" placeholder="留空不改"></label>
-          <label>节点 ID<input name="node_ids" placeholder="逗号分隔；留空恢复套餐默认"></label>
+          <label>有效期天数<input name="days" inputmode="numeric" placeholder="留空不改"></label>
+          <label>流量 GB<input name="quota_gb" inputmode="decimal" placeholder="留空按套餐或不改"></label>
+          <label class="wide-field">备注<input name="note" placeholder="可选"></label>
+          <div class="wide-field user-node-picker-slot">${nodePicker(nodes)}</div>
           <div class="form-actions">
             <button class="primary" type="submit">保存用户</button>
             <button class="secondary" data-action="user-form-close" type="button">收起</button>
@@ -97,7 +134,7 @@ export function renderAdminUsers(data = {}) {
         </form>
       </article>
       <div class="toolbar"><input data-filter="users" value="${esc(query)}" placeholder="搜索用户"><button data-action="users-filter" type="button">筛选</button></div>
-      <div class="card-list">${visibleUsers.map(userCard).join("") || `<article class="admin-card empty"><p>${users.length ? "没有匹配的用户" : "暂无用户"}</p><button data-action="user-create-sheet" type="button">创建用户</button></article>`}</div>
+      <div class="card-list">${visibleUsers.map((user) => userCard(user, nodes)).join("") || `<article class="admin-card empty"><p>${users.length ? "没有匹配的用户" : "暂无用户"}</p><button data-action="user-create-sheet" type="button">创建用户</button></article>`}</div>
     </section>
   `;
 }

@@ -3,6 +3,14 @@ import api
 
 def handle_get(handler):
     status, payload = api.handle_get(handler.path, handler.current_session())
+    if status == 200 and isinstance(payload, dict) and isinstance(payload.get("content"), (bytes, bytearray)):
+        filename = payload.get("filename") or "fake-ui-backup.tgz"
+        handler.respond_bytes(
+            payload.get("content"),
+            payload.get("content_type") or "application/octet-stream",
+            {"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+        return
     handler.respond_json(payload, status)
 
 
