@@ -1,0 +1,20 @@
+name: Sync Repository About
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update repository description
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh repo edit "$REPOSITORY" \
+            --description "单机多出口代理编排系统：一台 VPS 稳定入口，组合 VLESS Reality、Hysteria2、HTTP/SOCKS5 上游出口、用户订阅、SQLite 数据层和链上收款。" \
+            --homepage ""

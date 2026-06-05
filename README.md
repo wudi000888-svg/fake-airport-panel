@@ -2,9 +2,9 @@
 
 当前版本：**v2.0.0**
 
-一个面向单台 VPS 的多出口代理节点编排系统。
+fake-ui 是一个面向单台 VPS 的多出口代理编排系统：用一台稳定入口 VPS 承载面板、证书、订阅和协议入口，再把直连、HTTP 上游、SOCKS5 上游编排成多个可独立控制的节点出口。
 
-fake-ui 不是传统“大而全”的机场面板，而是专注解决一个更具体的问题：**在一台 VPS 上编排多个可独立控制出口的代理节点**。你可以把同一台服务器拆成多个 VLESS 节点，每个节点单独选择本机直连、HTTP 上游或 SOCKS5 上游出口，并把出口 IP、国家和节点名称同步到用户订阅里。
+它不是传统“大而全”的机场面板，而是专注解决一个更具体的问题：**在一台 VPS 上编排多个可独立控制出口的代理节点**。你可以把同一台服务器拆成多个 VLESS 节点，每个节点单独选择本机直连、HTTP 上游或 SOCKS5 上游出口，并把出口 IP、国家和节点名称同步到用户订阅里。
 
 同时保留 Hysteria2、用户、套餐、订单、订阅、流量限制、到期时间和一键迁移部署这些基础能力。v2.0.0 面向商业化运营做了移动端前端重构、SQLite 数据层、TTL 缓存、链上收款和新加坡测试重置流程；套餐仍按 USD 计价，管理员只需要配置收款地址，系统即可生成二维码并通过链上查询自动验账，适合小规模自托管、单机多出口实验，以及需要快速复刻部署环境的个人开发者。
 
@@ -104,17 +104,13 @@ fake-ui 就是把这两件事接在一起：
 
 以下截图来自本地 demo 数据，只用于展示运行效果，不包含真实域名、用户密码、订阅 token 或代理账号。
 
-| 登录 | 运营概览 |
+| 桌面运营概览 | 移动端用户订单 |
 |---|---|
-| ![登录](docs/screenshots/01-login.png) | ![运营概览](docs/screenshots/02-admin-dashboard.png) |
+| ![v2 桌面运营概览](docs/screenshots/v2/desktop-admin-overview.png) | ![v2 移动端用户订单](docs/screenshots/v2/mobile-user-orders.png) |
 
-| 节点维护 | 用户管理 |
+| 移动端订单管理 | 移动端设置 |
 |---|---|
-| ![节点维护](docs/screenshots/03-node-management.png) | ![用户管理](docs/screenshots/04-user-management.png) |
-
-| 套餐管理 |
-|---|
-| ![套餐管理](docs/screenshots/05-plans.png) |
+| ![v2 移动端订单管理](docs/screenshots/v2/mobile-admin-orders.png) | ![v2 移动端设置](docs/screenshots/v2/mobile-admin-settings.png) |
 
 ## 项目结构
 
