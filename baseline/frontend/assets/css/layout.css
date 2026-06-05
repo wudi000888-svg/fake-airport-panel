@@ -78,7 +78,7 @@ body {
   scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
 }
 
-.nav-stack.secondary {
+.nav-stack-secondary {
   margin-top: 0;
   padding-top: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.14);

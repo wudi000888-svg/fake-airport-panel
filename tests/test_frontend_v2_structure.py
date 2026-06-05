@@ -135,11 +135,15 @@ def test_frontend_v2_layout_prevents_dashboard_overflow():
     assert "state.shell?.version" in layout_js
     assert "side-nav-scroll" in layout_js
     assert "side-nav-footer" in layout_js
+    assert "nav-stack secondary" not in layout_js
+    assert "nav-stack-secondary" in layout_js
     assert "overflow-x: hidden" in layout_css
     assert "overflow-y: auto" in layout_css
     assert "grid-template-rows: auto minmax(0, 1fr) auto" in layout_css
     assert ".side-nav-scroll" in layout_css
     assert ".side-nav-footer" in layout_css
+    assert ".nav-stack.secondary" not in layout_css
+    assert ".nav-stack-secondary" in layout_css
     assert "margin-top: auto" not in layout_css
     assert ".version-chip" in layout_css
     assert "max-width:" in layout_css

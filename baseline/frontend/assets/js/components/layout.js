@@ -49,7 +49,7 @@ export function layout(content) {
         </div>
         <div class="side-nav-scroll">
           <div class="nav-stack">${nav}</div>
-          ${secondary ? `<div class="nav-stack secondary">${secondary}</div>` : ""}
+          ${secondary ? `<div class="nav-stack nav-stack-secondary">${secondary}</div>` : ""}
         </div>
         <div class="side-nav-footer">
           <div class="side-nav-meta">
