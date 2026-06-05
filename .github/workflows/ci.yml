@@ -23,7 +23,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Compile baseline modules
-        run: python -m py_compile baseline/*.py
+        run: python -m compileall -q baseline
 
       - name: Run tests
-        run: python -m pytest -q
+        run: python -m pytest -vv --maxfail=1
