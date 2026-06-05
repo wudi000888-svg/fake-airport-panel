@@ -70,6 +70,7 @@ def app_modules(tmp_path, monkeypatch):
     monkeypatch.setenv("PANEL_DIR", str(panel_dir))
     monkeypatch.setenv("PUBLIC_BASE_URL", "https://example.test")
     monkeypatch.setenv("ENFORCE_USERS_CMD", "python noop.py")
+    monkeypatch.setenv("AIRPORT_LOGIN_LOG", str(tmp_path / "airport-users.log"))
     monkeypatch.setenv("HY2_ENV_FILE", str(hy2_env_file))
     monkeypatch.setenv("HY2_CONFIG_FILE", str(hy2_config_file))
 
