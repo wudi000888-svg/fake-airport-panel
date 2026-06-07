@@ -1,11 +1,9 @@
-import os
-
 import db
 import db_schema
 
 
 def use_sqlite():
-    return os.getenv("FAKE_UI_STORE", "").strip().lower() in {"sqlite", "db"}
+    return True
 
 
 def ensure_sqlite(path=None):

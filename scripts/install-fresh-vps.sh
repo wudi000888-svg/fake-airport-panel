@@ -409,8 +409,7 @@ PANEL_IMAGE=xray-proxy-panel:local
 HYSTERIA_IMAGE=tobyxdd/hysteria:latest
 NGINX_IMAGE=nginx:1.27-alpine
 CERTBOT_IMAGE=certbot/certbot:latest
-FAKE_UI_VERSION=2.0.1
-FAKE_UI_STORE=sqlite
+FAKE_UI_VERSION=2.1.0
 FAKE_UI_DB=/data/panel/fake-ui.db
 EOF
 }
@@ -457,16 +456,20 @@ write_runtime_json() {
   HY2_MASQUERADE_URL="https://$PANEL_DOMAIN" \
   ADMIN_PASS="$ADMIN_PASS" \
   SESSION_SECRET="$SESSION_SECRET" \
+  FAKE_UI_DB="$APP_DIR/data/panel/fake-ui.db" \
   python3 - <<'PY'
-import json
 import os
 import sys
 
 sys.path.insert(0, "baseline")
 import admin_profile
 import auth_store
+import link_settings
 import node_catalog
+import payments_store
 import plans_store
+import registration_store
+import user_store
 
 auth_store.save_auth({
     "session_secret": os.environ["SESSION_SECRET"],
@@ -480,24 +483,11 @@ auth_store.save_auth({
 plans_store.load_plans()
 node_catalog.load_catalog()
 admin_profile.load_profile()
-for path, data in {
-    "data/panel/users.json": {"version": 1, "users": {}},
-    "data/panel/orders.json": {"version": 1, "orders": []},
-    "data/panel/registrations.json": {"version": 1, "pending": [], "resets": []},
-}.items():
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+link_settings.read()
+payments_store.load_rates()
+registration_store.load_data()
+user_store.load_users()
 PY
-
-  cat >data/panel/link_settings.json <<EOF
-{
-  "vless_address": "$VLESS_DOMAIN",
-  "vless_port": 443,
-  "vless_name": "VLESS_Reality_$VLESS_DOMAIN",
-  "hy2_name": "HY2_$HY2_DOMAIN"
-}
-EOF
 
   cat >data/hysteria2/.env <<EOF
 HY_DOMAIN=$HY2_DOMAIN
@@ -571,7 +561,7 @@ VLESS address: $VLESS_DOMAIN:443
 Hysteria2 address: $HY2_DOMAIN:$HY2_PORT
 EOF
 
-  chmod 600 data/panel/*.json data/hysteria2/.env data/DEPLOY-SECRETS.txt data/panel/xray-proxy-panel-login.txt
+  chmod 600 data/panel/auth.json data/panel/fake-ui.db data/hysteria2/.env data/DEPLOY-SECRETS.txt data/panel/xray-proxy-panel-login.txt
 }
 
 compile_and_validate() {
@@ -586,7 +576,30 @@ PY
 }
 
 prepare_sqlite_store() {
-  python3 scripts/migrate-json-to-sqlite.py --data-dir data/panel --db data/panel/fake-ui.db
+  PANEL_DIR="$APP_DIR/data/panel" \
+  FAKE_UI_DB="$APP_DIR/data/panel/fake-ui.db" \
+  python3 - <<'PY'
+import sys
+sys.path.insert(0, "baseline")
+import admin_profile
+import link_settings
+import node_catalog
+import payments_store
+import plans_store
+import registration_store
+import store_facade
+import user_store
+
+store_facade.ensure_sqlite()
+plans_store.load_plans()
+node_catalog.load_catalog()
+admin_profile.load_profile()
+link_settings.read()
+payments_store.load_rates()
+registration_store.load_data()
+user_store.load_users()
+print("SQLite runtime initialized.")
+PY
 }
 
 write_native_nginx_templates() {
@@ -923,7 +936,13 @@ final_start_and_check() {
   fi
 
   local token
-  token="$(python3 -c 'import json; print(json.load(open("data/panel/admin_profile.json"))["user"]["sub_token"])')"
+  token="$(PANEL_DIR="$APP_DIR/data/panel" FAKE_UI_DB="$APP_DIR/data/panel/fake-ui.db" python3 - <<'PY'
+import sys
+sys.path.insert(0, "baseline")
+import admin_profile
+print(admin_profile.get_admin_user()["sub_token"])
+PY
+)"
 
   curl -k -fsS "https://$PANEL_DOMAIN/login" >/dev/null
   curl -k -fsS "https://$PANEL_DOMAIN/assets/js/main.js" >/dev/null

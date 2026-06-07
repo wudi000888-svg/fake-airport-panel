@@ -1,8 +1,6 @@
 import secrets
 from datetime import datetime, timezone
 
-from panel_config import PLANS_FILE
-from json_store import load_json, save_json
 import store_facade
 from repositories.sqlite_plans import SQLitePlansRepository
 
@@ -40,20 +38,28 @@ def default_data():
 
 
 def load_plans():
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        return {"version": 2, "plans": SQLitePlansRepository().list()}
-    return load_json(PLANS_FILE, default_data, create=True)
+    store_facade.ensure_sqlite()
+    plans = SQLitePlansRepository().list()
+    existing_ids = {plan.get("id") for plan in plans}
+    changed = False
+    for plan in DEFAULT_PLANS:
+        if plan["id"] not in existing_ids:
+            item = dict(plan)
+            item.setdefault("created_at", now_iso())
+            item.setdefault("updated_at", now_iso())
+            SQLitePlansRepository().upsert(item)
+            changed = True
+    if changed:
+        plans = SQLitePlansRepository().list()
+    return {"version": 2, "plans": plans}
 
 
 def save_plans(data):
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        repo = SQLitePlansRepository()
-        for plan in (data or {}).get("plans", []):
-            repo.upsert(plan)
-        return data
-    save_json(PLANS_FILE, data)
+    store_facade.ensure_sqlite()
+    repo = SQLitePlansRepository()
+    for plan in (data or {}).get("plans", []):
+        repo.upsert(plan)
+    return data
 
 
 def list_plans(include_disabled=True):
@@ -100,52 +106,20 @@ def normalize_plan(data):
 
 def upsert_plan(data):
     plan = normalize_plan(data)
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        existing = SQLitePlansRepository().get(plan["id"])
-        if existing and existing.get("created_at"):
-            plan["created_at"] = existing["created_at"]
-        else:
-            plan["created_at"] = now_iso()
-        return SQLitePlansRepository().upsert(plan)
-    store = load_plans()
-    plans = store.setdefault("plans", [])
-    for idx, item in enumerate(plans):
-        if item.get("id") == plan["id"]:
-            old_created = item.get("created_at")
-            plans[idx] = {**item, **plan}
-            if old_created:
-                plans[idx]["created_at"] = old_created
-            break
+    store_facade.ensure_sqlite()
+    existing = SQLitePlansRepository().get(plan["id"])
+    if existing and existing.get("created_at"):
+        plan["created_at"] = existing["created_at"]
     else:
         plan["created_at"] = now_iso()
-        plans.append(plan)
-    save_plans(store)
-    return plan
+    return SQLitePlansRepository().upsert(plan)
 
 
 def set_plan_enabled(plan_id, enabled):
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        return SQLitePlansRepository().set_enabled(plan_id, enabled)
-    store = load_plans()
-    for plan in store.get("plans", []):
-        if plan.get("id") == plan_id:
-            plan["enabled"] = bool(enabled)
-            plan["updated_at"] = now_iso()
-            save_plans(store)
-            return plan
-    raise RuntimeError("plan not found")
+    store_facade.ensure_sqlite()
+    return SQLitePlansRepository().set_enabled(plan_id, enabled)
 
 
 def delete_plan(plan_id):
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        return SQLitePlansRepository().delete(plan_id)
-    store = load_plans()
-    old = len(store.get("plans", []))
-    store["plans"] = [p for p in store.get("plans", []) if p.get("id") != plan_id]
-    if len(store["plans"]) == old:
-        raise RuntimeError("plan not found")
-    save_plans(store)
-    return True
+    store_facade.ensure_sqlite()
+    return SQLitePlansRepository().delete(plan_id)

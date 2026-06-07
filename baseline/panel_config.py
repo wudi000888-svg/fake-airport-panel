@@ -27,17 +27,9 @@ QR_CMD = os.getenv("QR_CMD", "qrencode")
 
 PANEL_DIR = env_path("PANEL_DIR", "/opt/xray-proxy-panel")
 AUTH_FILE = PANEL_DIR / "auth.json"
-LINK_SETTINGS_FILE = PANEL_DIR / "link_settings.json"
 SUB_TOKEN_FILE = PANEL_DIR / "sub_token.txt"
-USERS_FILE = PANEL_DIR / "users.json"
-PLANS_FILE = PANEL_DIR / "plans.json"
-ORDERS_FILE = PANEL_DIR / "orders.json"
-PAYMENTS_FILE = PANEL_DIR / "payments.json"
 AUDIT_LOG_FILE = PANEL_DIR / "audit.log"
-NODE_CATALOG_FILE = PANEL_DIR / "nodes.json"
-ADMIN_PROFILE_FILE = PANEL_DIR / "admin_profile.json"
 BACKUP_DIR = PANEL_DIR / "backups"
-REGISTRATION_FILE = PANEL_DIR / "registrations.json"
 SUB_ACCESS_LOG_FILE = PANEL_DIR / "subscription_access.log"
 HY2_TRAFFIC_SECRET_FILE = PANEL_DIR / "hy2_traffic_secret.txt"
 

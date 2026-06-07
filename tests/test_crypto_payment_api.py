@@ -148,7 +148,7 @@ def test_user_order_create_ignores_body_username(payment_modules, monkeypatch):
     assert payload["order"]["kind"] == "create"
 
 
-def test_user_order_create_auto_renews_existing_user(payment_modules, monkeypatch):
+def test_user_order_create_different_plan_is_new_for_existing_user(payment_modules, monkeypatch):
     api = importlib.import_module("api")
     plans_store = importlib.import_module("plans_store")
     user_admin = importlib.import_module("user_admin")
@@ -163,6 +163,41 @@ def test_user_order_create_auto_renews_existing_user(payment_modules, monkeypatc
                 "alice": {
                     "enabled": True,
                     "role": "user",
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                    "quota_bytes": 0,
+                    "used_bytes": 0,
+                }
+            },
+        }
+    )
+
+    status, payload = api.handle_post(
+        "/api/orders/create",
+        {"plan_id": "standard", "kind": "create", "username": "bob"},
+        user_session("alice"),
+    )
+
+    assert status == 200
+    assert payload["order"]["username"] == "alice"
+    assert payload["order"]["kind"] == "new"
+
+
+def test_user_order_create_same_plan_renews_existing_user(payment_modules, monkeypatch):
+    api = importlib.import_module("api")
+    plans_store = importlib.import_module("plans_store")
+    user_admin = importlib.import_module("user_admin")
+    user_store = importlib.import_module("user_store")
+
+    monkeypatch.setattr(user_admin, "enforce_users_now", lambda: "ok")
+    plans_store.upsert_plan({"id": "standard", "name": "Standard", "days": "30", "traffic_gb": "100", "price": "39"})
+    user_store.save_users(
+        {
+            "version": 1,
+            "users": {
+                "alice": {
+                    "enabled": True,
+                    "role": "user",
+                    "plan_id": "standard",
                     "expires_at": "2099-01-01T00:00:00+00:00",
                     "quota_bytes": 0,
                     "used_bytes": 0,
@@ -268,7 +303,8 @@ def test_dashboard_includes_payment_data_and_backup_includes_payments(payment_mo
     assert "payment_methods" in user_payload
     assert user_payload["payment_methods"][0]["id"] == "btc-main"
     assert "payments" in user_payload
-    assert "payments.json" in backup_manager.BACKUP_FILES
+    assert "fake-ui.db" in backup_manager.BACKUP_FILES
+    assert "payments.json" not in backup_manager.BACKUP_FILES
 
 
 def test_admin_dashboard_includes_payment_methods_payments_and_rates(payment_modules, monkeypatch):

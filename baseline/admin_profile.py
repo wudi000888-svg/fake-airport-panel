@@ -3,8 +3,8 @@ import uuid
 from datetime import timedelta
 
 import node_catalog
-from panel_config import ADMIN_PROFILE_FILE
-from json_store import load_json, save_json
+import store_facade
+from repositories.sqlite_settings import SQLiteSettingsRepository
 import user_store
 
 
@@ -13,14 +13,17 @@ ADMIN_HY2_USERNAME = "panel-admin"
 
 
 def load_profile():
-    data = load_json(ADMIN_PROFILE_FILE, {"version": 1, "user": {}})
+    store_facade.ensure_sqlite()
+    data = SQLiteSettingsRepository().get("admin_profile", {"version": 2, "user": {}})
     if ensure_profile(data):
         save_profile(data)
     return data
 
 
 def save_profile(data):
-    save_json(ADMIN_PROFILE_FILE, data)
+    store_facade.ensure_sqlite()
+    SQLiteSettingsRepository().set("admin_profile", data)
+    return data
 
 
 def ensure_profile(data):

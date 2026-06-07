@@ -75,7 +75,7 @@ class SQLitePlansRepository(SQLiteRepository):
                 "name": row["name"],
                 "days": row["days"],
                 "traffic_gb": row["traffic_gb"],
-                "price": row["price"],
+                "price": float(row["price"] or 0),
                 "enabled": bool(row["enabled"]),
                 "sort": row["sort_order"],
             }

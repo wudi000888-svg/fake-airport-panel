@@ -41,13 +41,9 @@ copy_dir_contents() {
 
 panel_files=(
   auth.json
-  users.json
-  link_settings.json
-  plans.json
-  orders.json
-  nodes.json
-  admin_profile.json
-  registrations.json
+  fake-ui.db
+  fake-ui.db-wal
+  fake-ui.db-shm
   sub_token.txt
   hy2_traffic_secret.txt
   audit.log
@@ -89,4 +85,3 @@ chmod 600 "$OUT"
 
 echo "Exported compose migration bundle:"
 echo "$OUT"
-

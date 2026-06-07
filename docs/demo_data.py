@@ -23,24 +23,25 @@ os.environ.setdefault("HY2_ENV_FILE", str(ROOT / ".demo-runtime" / "hysteria2" /
 os.environ.setdefault("HY2_CONFIG_FILE", str(ROOT / ".demo-runtime" / "hysteria2" / "server.yaml"))
 
 import auth_store
+import admin_profile
+import node_catalog
+import orders_store
+import payments_store
+import plans_store
+import registration_store
+import store_facade
+import user_store
 from json_store import save_json
 from panel_config import (
-    ADMIN_PROFILE_FILE,
     AUDIT_LOG_FILE,
     AUTH_FILE,
     HY2_CONFIG_FILE,
     HY2_ENV_FILE,
-    LINK_SETTINGS_FILE,
-    NODE_CATALOG_FILE,
-    ORDERS_FILE,
-    PAYMENTS_FILE,
     PANEL_DIR,
-    PLANS_FILE,
-    REGISTRATION_FILE,
     SUB_ACCESS_LOG_FILE,
-    USERS_FILE,
     XRAY_CONFIG,
 )
+from repositories.sqlite_settings import SQLiteSettingsRepository
 
 
 def iso_days(days):
@@ -80,6 +81,7 @@ def user(name, plan, days, used, quota, note, node_ids=None):
 
 def main():
     PANEL_DIR.mkdir(parents=True, exist_ok=True)
+    store_facade.ensure_sqlite()
 
     save_json(
         AUTH_FILE,
@@ -92,22 +94,20 @@ def main():
         },
     )
 
-    save_json(
-        PLANS_FILE,
+    plans_store.save_plans(
         {
-            "version": 1,
+            "version": 2,
             "plans": [
                 {"id": "starter", "name": "入门套餐", "days": 30, "traffic_gb": 100, "price": 19, "node_groups": ["default"], "enabled": True, "sort": 10},
                 {"id": "standard", "name": "标准套餐", "days": 30, "traffic_gb": 300, "price": 39, "node_groups": ["default"], "enabled": True, "sort": 20},
                 {"id": "pro", "name": "进阶套餐", "days": 30, "traffic_gb": 800, "price": 89, "node_groups": ["default"], "enabled": True, "sort": 30},
             ],
-        },
+        }
     )
 
-    save_json(
-        NODE_CATALOG_FILE,
+    node_catalog.save_catalog(
         {
-            "version": 1,
+            "version": 2,
             "vless_defaults_initialized": True,
             "nodes": [
                 {"id": "vless-main", "name": "VLESS 直连", "kind": "vless", "group": "default", "region": "", "multiplier": 1, "status": "online", "enabled": True, "sort": 10, "outbound_mode": "direct", "exit_ip": "203.0.113.10", "country_code": "SG", "country": "Singapore", "city": "Singapore"},
@@ -116,39 +116,36 @@ def main():
                 {"id": "vless-proxy-3", "name": "VLESS 备用出口", "kind": "vless", "group": "default", "region": "", "multiplier": 1, "status": "maintenance", "enabled": False, "sort": 13, "outbound_mode": "direct", "exit_ip": "203.0.113.40", "country_code": "HK", "country": "Hong Kong", "city": "Hong Kong"},
                 {"id": "hy2-main", "name": "Hysteria2", "kind": "hy2", "group": "default", "region": "", "multiplier": 1, "status": "online", "enabled": True, "sort": 20, "exit_ip": "203.0.113.10", "country_code": "SG", "country": "Singapore", "city": "Singapore"},
             ],
-        },
+        }
     )
 
-    save_json(
-        USERS_FILE,
+    user_store.save_users(
         {
-            "version": 1,
+            "version": 2,
             "users": {
                 "viewer": user("viewer", "standard", 21, 42, 300, "本地演示登录用户"),
                 "alice": user("alice", "standard", 18, 126, 300, "标准套餐用户"),
                 "bob": user("bob", "starter", 6, 88, 100, "只开放直连节点", ["vless-main", "hy2-main"]),
                 "carol": user("carol", "pro", 43, 215, 800, "测试多出口节点"),
             },
-        },
+        }
     )
 
-    save_json(
-        ORDERS_FILE,
+    orders_store.save_orders(
         {
-            "version": 1,
+            "version": 2,
             "orders": [
                 {"id": "ord_demo_viewer_waiting", "username": "viewer", "kind": "renew", "plan_id": "standard", "plan_name": "标准套餐", "days": 30, "traffic_gb": 300, "amount": 39, "status": "pending", "payment_status": "awaiting_payment", "payment_id": "pay_demo_viewer", "note": "链上付款演示", "operator": "user", "created_at": iso_days(-1)},
                 {"id": "ord_demo_viewer_done", "username": "viewer", "kind": "create", "plan_id": "starter", "plan_name": "入门套餐", "days": 30, "traffic_gb": 100, "amount": 19, "status": "completed", "payment_status": "confirmed", "note": "历史订单演示", "operator": "system", "created_at": iso_days(-7)},
                 {"id": "ord_demo_pending", "username": "alice", "kind": "renew", "plan_id": "standard", "plan_name": "标准套餐", "days": 30, "traffic_gb": 300, "amount": 39, "status": "pending", "note": "线下付款待确认", "operator": "user", "created_at": iso_days(-1)},
                 {"id": "ord_demo_done", "username": "carol", "kind": "create", "plan_id": "pro", "plan_name": "进阶套餐", "days": 30, "traffic_gb": 800, "amount": 89, "status": "completed", "note": "演示订单", "operator": "admin", "created_at": iso_days(-5)},
             ],
-        },
+        }
     )
 
-    save_json(
-        PAYMENTS_FILE,
+    payments_store.save_payments(
         {
-            "version": 1,
+            "version": 2,
             "methods": [
                 {
                     "id": "usdt-bsc-demo",
@@ -183,14 +180,13 @@ def main():
                 }
             ],
             "rates": {"overrides": {"USDT": "1"}, "cache": {}},
-        },
+        }
     )
 
-    save_json(REGISTRATION_FILE, {"version": 1, "registrations": [], "password_resets": []})
-    save_json(
-        ADMIN_PROFILE_FILE,
+    registration_store.save_data({"version": 2, "pending": [], "resets": []})
+    admin_profile.save_profile(
         {
-            "version": 1,
+            "version": 2,
             "user": {
                 "enabled": True,
                 "expires_at": iso_days(365),
@@ -208,10 +204,10 @@ def main():
                 "quota_bytes": 0,
                 "used_bytes": 0,
             },
-        },
+        }
     )
-    save_json(
-        LINK_SETTINGS_FILE,
+    SQLiteSettingsRepository().set(
+        "link_settings",
         {
             "vless_address": "vless.example.com",
             "vless_port": 443,

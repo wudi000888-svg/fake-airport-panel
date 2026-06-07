@@ -112,8 +112,7 @@ from pathlib import Path
 
 path = Path(".env")
 wanted = {
-    "FAKE_UI_VERSION": "2.0.1",
-    "FAKE_UI_STORE": "sqlite",
+    "FAKE_UI_VERSION": "2.1.0",
     "FAKE_UI_DB": "/data/panel/fake-ui.db",
 }
 lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
@@ -131,7 +130,28 @@ for key, value in wanted.items():
         out.append(f"{key}={value}")
 path.write_text("\n".join(out).strip() + "\n", encoding="utf-8")
 PY
-python3 scripts/migrate-json-to-sqlite.py --data-dir data/panel --db data/panel/fake-ui.db
+PANEL_DIR="`$REMOTE_DIR/data/panel" FAKE_UI_DB="`$REMOTE_DIR/data/panel/fake-ui.db" python3 - <<'PY'
+import sys
+sys.path.insert(0, "baseline")
+import admin_profile
+import link_settings
+import node_catalog
+import payments_store
+import plans_store
+import registration_store
+import store_facade
+import user_store
+
+store_facade.ensure_sqlite()
+plans_store.load_plans()
+node_catalog.load_catalog()
+admin_profile.load_profile()
+link_settings.read()
+payments_store.load_rates()
+registration_store.load_data()
+user_store.load_users()
+print("SQLite runtime initialized.")
+PY
 python3 -m pytest -q
 "@
 

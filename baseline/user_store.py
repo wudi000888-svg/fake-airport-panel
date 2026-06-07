@@ -2,9 +2,9 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from panel_config import USERS_FILE
-from json_store import load_json, save_json
+import store_facade
 import node_catalog
+from repositories.sqlite_users import SQLiteUsersRepository
 
 
 def now_utc():
@@ -22,20 +22,25 @@ def make_expiry(days):
 
 
 def load_users():
-    data = load_json(USERS_FILE, {"version": 1, "users": {}})
+    store_facade.ensure_sqlite()
+    data = {"version": 2, "users": {u["username"]: u for u in SQLiteUsersRepository().list()}}
     if ensure_hy2_credentials(data):
         save_users(data)
     return data
 
 
 def load_users_required():
-    if not USERS_FILE.exists():
-        raise RuntimeError(f"未找到 {USERS_FILE}")
     return load_users()
 
 
 def save_users(data):
-    save_json(USERS_FILE, data)
+    store_facade.ensure_sqlite()
+    repo = SQLiteUsersRepository()
+    for username, user in (data or {}).get("users", {}).items():
+        item = dict(user)
+        item["username"] = username
+        repo.upsert(item)
+    return data
 
 
 def remove_vless_node_uuid(node_id):

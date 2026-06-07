@@ -1,8 +1,8 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from panel_config import REGISTRATION_FILE
-from json_store import load_json, save_json
+import store_facade
+from repositories.sqlite_registrations import SQLitePasswordResetsRepository, SQLiteRegistrationsRepository
 
 
 def now_utc():
@@ -14,11 +14,23 @@ def now_iso():
 
 
 def load_data():
-    return load_json(REGISTRATION_FILE, {"version": 1, "pending": [], "resets": []}, create=True)
+    store_facade.ensure_sqlite()
+    return {
+        "version": 2,
+        "pending": SQLiteRegistrationsRepository().list(),
+        "resets": SQLitePasswordResetsRepository().list(),
+    }
 
 
 def save_data(data):
-    save_json(REGISTRATION_FILE, data)
+    store_facade.ensure_sqlite()
+    reg_repo = SQLiteRegistrationsRepository()
+    reset_repo = SQLitePasswordResetsRepository()
+    for item in (data or {}).get("pending", []):
+        reg_repo.upsert(item)
+    for item in (data or {}).get("resets", []):
+        reset_repo.upsert(item)
+    return data
 
 
 def create_registration(username, password, email="", plan_id="", note=""):
@@ -41,9 +53,7 @@ def create_registration(username, password, email="", plan_id="", note=""):
         "created_at": now_iso(),
         "expires_at": (now_utc() + timedelta(days=7)).isoformat(),
     }
-    data = load_data()
-    data.setdefault("pending", []).append(item)
-    save_data(data)
+    SQLiteRegistrationsRepository().upsert(item)
     return {k: v for k, v in item.items() if k != "password"}
 
 
@@ -55,21 +65,12 @@ def list_registrations(status=None):
 
 
 def get_registration(token):
-    for item in load_data().get("pending", []):
-        if item.get("token") == token:
-            return item
-    return None
+    return SQLiteRegistrationsRepository().get(token)
 
 
 def update_registration(token, **updates):
-    data = load_data()
-    for item in data.get("pending", []):
-        if item.get("token") == token:
-            item.update(updates)
-            item["updated_at"] = now_iso()
-            save_data(data)
-            return {k: v for k, v in item.items() if k != "password"}
-    raise RuntimeError("registration not found")
+    item = SQLiteRegistrationsRepository().update(token, **updates, updated_at=now_iso())
+    return {k: v for k, v in item.items() if k != "password"}
 
 
 def create_password_reset(username):
@@ -81,9 +82,7 @@ def create_password_reset(username):
         "created_at": now_iso(),
         "expires_at": (now_utc() + timedelta(hours=24)).isoformat(),
     }
-    data = load_data()
-    data.setdefault("resets", []).append(item)
-    save_data(data)
+    SQLitePasswordResetsRepository().upsert(item)
     return item
 
 
@@ -95,18 +94,8 @@ def list_resets(status=None):
 
 
 def get_reset(token):
-    for item in load_data().get("resets", []):
-        if item.get("token") == token:
-            return item
-    return None
+    return SQLitePasswordResetsRepository().get(token)
 
 
 def update_reset(token, **updates):
-    data = load_data()
-    for item in data.get("resets", []):
-        if item.get("token") == token:
-            item.update(updates)
-            item["updated_at"] = now_iso()
-            save_data(data)
-            return item
-    raise RuntimeError("reset request not found")
+    return SQLitePasswordResetsRepository().update(token, **updates, updated_at=now_iso())

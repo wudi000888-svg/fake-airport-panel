@@ -73,7 +73,7 @@ docker compose logs --tail=100 panel
 
 | 阶段 | 检查项 |
 | --- | --- |
-| 上线前 | 备份面板目录、Xray 配置、Hysteria2 配置；确认备份包含 `payments.json` |
+| 上线前 | 备份面板目录、Xray 配置、Hysteria2 配置；确认备份包含 `fake-ui.db`、`fake-ui.db-wal`、`fake-ui.db-shm` |
 | 上线前 | 远端 `bash scripts/test-local.sh` |
 | 上线前 | 远端 `python3 -m pytest -q` |
 | 上线前 | 临时端口启动面板，测试 `/login`、`/api/session`、`/api/users`、`/api/nodes` |

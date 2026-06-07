@@ -1,10 +1,11 @@
 import re
 from datetime import datetime, timezone
 
-from panel_config import NODE_CATALOG_FILE
-from json_store import load_json, save_json
+import store_facade
 import node_display
 import node_mutations
+from repositories.sqlite_nodes import SQLiteNodesRepository
+from repositories.sqlite_settings import SQLiteSettingsRepository
 
 
 PRIMARY_VLESS_NODE_ID = "vless-main"
@@ -27,11 +28,10 @@ REQUIRED_DEFAULT_IDS = {PRIMARY_VLESS_NODE_ID, "hy2-main"}
 
 
 def load_catalog():
-    data = load_json(
-        NODE_CATALOG_FILE,
-        lambda: {"version": 1, "vless_defaults_initialized": True, "nodes": [dict(n) for n in DEFAULT_NODES]},
-        create=True,
-    )
+    store_facade.ensure_sqlite()
+    settings = SQLiteSettingsRepository()
+    data = settings.get("node_catalog_meta", {"version": 2, "vless_defaults_initialized": True})
+    data["nodes"] = SQLiteNodesRepository().list()
     if ensure_default_nodes(data):
         save_catalog(data)
     return data
@@ -113,7 +113,22 @@ def normalize_default_vless_sort(store):
 
 
 def save_catalog(data):
-    save_json(NODE_CATALOG_FILE, data)
+    store_facade.ensure_sqlite()
+    repo = SQLiteNodesRepository()
+    wanted_ids = {str(node.get("id", "")) for node in (data or {}).get("nodes", [])}
+    for existing in repo.list():
+        if existing.get("id") not in wanted_ids:
+            repo.delete(existing.get("id", ""))
+    for node in (data or {}).get("nodes", []):
+        repo.upsert(node)
+    SQLiteSettingsRepository().set(
+        "node_catalog_meta",
+        {
+            "version": 2,
+            "vless_defaults_initialized": bool((data or {}).get("vless_defaults_initialized", True)),
+        },
+    )
+    return data
 
 
 def list_nodes(include_disabled=True):

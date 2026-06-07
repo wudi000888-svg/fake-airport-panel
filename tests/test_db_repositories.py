@@ -41,96 +41,26 @@ def test_db_schema_creates_required_tables(tmp_path, monkeypatch):
     }.issubset(tables)
 
 
-def test_json_to_sqlite_imports_plans_and_orders(tmp_path, monkeypatch):
-    import importlib.util
-    import json
+def test_legacy_json_migration_tools_are_removed():
+    assert not (ROOT / "scripts" / "migrate-json-to-sqlite.py").exists()
+    assert not (ROOT / "scripts" / "export-sqlite-to-json.py").exists()
 
-    import panel_config
 
-    monkeypatch.setattr(panel_config, "PANEL_DIR", tmp_path)
+def test_business_backup_manifest_is_sqlite_only():
+    import backup_manager
 
-    (tmp_path / "plans.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "plans": [
-                    {
-                        "id": "pro",
-                        "name": "Pro",
-                        "days": 30,
-                        "traffic_gb": 100,
-                        "price": "9.9",
-                        "enabled": True,
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (tmp_path / "orders.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "orders": [
-                    {
-                        "id": "ord_1",
-                        "username": "alice",
-                        "kind": "renew",
-                        "plan_id": "pro",
-                        "amount": "9.9",
-                        "status": "pending",
-                        "created_at": "2026-01-01T00:00:00+00:00",
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    (tmp_path / "payments.json").write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "methods": [
-                    {
-                        "id": "usdt-bsc",
-                        "asset": "USDT",
-                        "chain": "bsc",
-                        "address": "0x2222222222222222222222222222222222222222",
-                        "enabled": True,
-                    }
-                ],
-                "payments": [
-                    {
-                        "id": "pay_1",
-                        "order_id": "ord_1",
-                        "username": "alice",
-                        "status": "confirmed",
-                        "asset": "USDT",
-                        "chain": "bsc",
-                        "txid": "0xabc",
-                        "created_at": "2026-01-01T00:00:00+00:00",
-                    }
-                ],
-                "rates": {"overrides": {"ETH": "3000"}, "cache": {"BTC": {"rate_usd": "90000"}}},
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    script = ROOT / "scripts" / "migrate-json-to-sqlite.py"
-    spec = importlib.util.spec_from_file_location("migrate_json_to_sqlite", script)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-
-    db_path = tmp_path / "fake-ui.db"
-    mod.migrate_json_to_sqlite(tmp_path, db_path)
-
-    with sqlite3.connect(db_path) as conn:
-        assert conn.execute("select name from plans where id='pro'").fetchone()[0] == "Pro"
-        assert conn.execute("select username from orders where id='ord_1'").fetchone()[0] == "alice"
-        assert conn.execute("select asset from payment_methods where id='usdt-bsc'").fetchone()[0] == "USDT"
-        assert conn.execute("select txid from payments where id='pay_1'").fetchone()[0] == "0xabc"
-        assert conn.execute("select value_json from settings where key='payment_rates'").fetchone()[0]
+    assert "fake-ui.db" in backup_manager.BACKUP_FILES
+    for legacy_name in [
+        "plans.json",
+        "orders.json",
+        "payments.json",
+        "users.json",
+        "nodes.json",
+        "registrations.json",
+        "admin_profile.json",
+        "link_settings.json",
+    ]:
+        assert legacy_name not in backup_manager.BACKUP_FILES
 
 
 def test_sqlite_repositories_preserve_plan_and_order_listing(tmp_path):
@@ -193,11 +123,59 @@ def test_sqlite_repositories_preserve_plan_and_order_listing(tmp_path):
     assert [order["id"] for order in orders.list(limit=2)] == ["ord_new", "ord_old"]
 
 
-def test_store_facade_switches_plans_and_orders_to_sqlite(tmp_path, monkeypatch):
+def test_sqlite_repositories_preserve_users_nodes_registrations_and_settings(tmp_path):
+    import db_schema
+    from repositories.sqlite_nodes import SQLiteNodesRepository
+    from repositories.sqlite_registrations import SQLitePasswordResetsRepository, SQLiteRegistrationsRepository
+    from repositories.sqlite_settings import SQLiteSettingsRepository
+    from repositories.sqlite_users import SQLiteUsersRepository
+
+    db_path = tmp_path / "fake-ui.db"
+    db_schema.migrate(db_path)
+
+    users = SQLiteUsersRepository(db_path)
+    nodes = SQLiteNodesRepository(db_path)
+    registrations = SQLiteRegistrationsRepository(db_path)
+    resets = SQLitePasswordResetsRepository(db_path)
+    settings = SQLiteSettingsRepository(db_path)
+
+    users.upsert(
+        {
+            "username": "alice",
+            "enabled": True,
+            "plan_id": "standard",
+            "expires_at": "2026-07-01T00:00:00+00:00",
+            "sub_token": "sub_alice",
+        }
+    )
+    users.upsert(
+        {
+            "username": "bob",
+            "enabled": False,
+            "plan_id": "starter",
+            "expires_at": "",
+            "sub_token": "sub_bob",
+        }
+    )
+    nodes.upsert({"id": "vless-main", "kind": "vless", "enabled": True, "sort": 10, "name": "VLESS"})
+    nodes.upsert({"id": "hy2-main", "kind": "hy2", "enabled": True, "sort": 20, "name": "Hysteria2"})
+    registrations.upsert({"token": "reg_1", "username": "alice", "status": "pending", "created_at": "2026-01-01T00:00:00+00:00"})
+    resets.upsert({"token": "rst_1", "username": "alice", "status": "pending", "created_at": "2026-01-02T00:00:00+00:00"})
+    settings.set("link_settings", {"vless_address": "vless.example.com", "hy2_name": "H2"})
+
+    assert users.get("alice")["plan_id"] == "standard"
+    assert [user["username"] for user in users.list()] == ["alice", "bob"]
+    assert [node["id"] for node in nodes.list()] == ["vless-main", "hy2-main"]
+    assert nodes.list(kind="vless")[0]["name"] == "VLESS"
+    assert registrations.get("reg_1")["username"] == "alice"
+    assert resets.get("rst_1")["status"] == "pending"
+    assert settings.get("link_settings")["hy2_name"] == "H2"
+
+
+def test_plans_and_orders_use_sqlite_runtime(tmp_path, monkeypatch):
     import importlib
 
     monkeypatch.setenv("PANEL_DIR", str(tmp_path))
-    monkeypatch.setenv("FAKE_UI_STORE", "sqlite")
 
     for name in ["panel_config", "db", "db_schema", "plans_store", "orders_store"]:
         if name in sys.modules:
@@ -225,11 +203,10 @@ def test_store_facade_switches_plans_and_orders_to_sqlite(tmp_path, monkeypatch)
     assert (tmp_path / "fake-ui.db").exists()
 
 
-def test_store_facade_switches_payments_to_sqlite(tmp_path, monkeypatch):
+def test_payments_use_sqlite_runtime(tmp_path, monkeypatch):
     import importlib
 
     monkeypatch.setenv("PANEL_DIR", str(tmp_path))
-    monkeypatch.setenv("FAKE_UI_STORE", "sqlite")
 
     for name in ["panel_config", "db", "db_schema", "payments_store"]:
         if name in sys.modules:
@@ -293,35 +270,69 @@ def test_database_path_uses_fake_ui_db_env(tmp_path, monkeypatch):
     assert db.database_path() == custom_db
 
 
-def test_export_sqlite_to_json_writes_plans_and_orders(tmp_path):
-    import importlib.util
-    import json
+def test_business_stores_are_sqlite_only_by_default(tmp_path, monkeypatch):
+    import importlib
 
-    import db_schema
-    from repositories.sqlite_orders import SQLiteOrdersRepository
-    from repositories.sqlite_payments import SQLitePaymentMethodsRepository, SQLitePaymentsRepository, SQLiteSettingsRepository
-    from repositories.sqlite_plans import SQLitePlansRepository
+    monkeypatch.setenv("PANEL_DIR", str(tmp_path))
 
-    db_path = tmp_path / "fake-ui.db"
-    export_dir = tmp_path / "export"
-    db_schema.migrate(db_path)
-    SQLitePlansRepository(db_path).upsert({"id": "pro", "name": "Pro", "days": 30, "traffic_gb": 100, "price": "9"})
-    SQLiteOrdersRepository(db_path).upsert({"id": "ord_1", "username": "alice", "status": "pending", "created_at": "2026-01-01T00:00:00+00:00"})
-    SQLitePaymentMethodsRepository(db_path).upsert({"id": "usdt-bsc", "asset": "USDT", "chain": "bsc", "address": "0x2222222222222222222222222222222222222222", "enabled": True})
-    SQLitePaymentsRepository(db_path).upsert({"id": "pay_1", "order_id": "ord_1", "username": "alice", "status": "confirmed", "asset": "USDT", "chain": "bsc", "txid": "0xabc", "created_at": "2026-01-01T00:00:00+00:00"})
-    SQLiteSettingsRepository(db_path).set("payment_rates", {"overrides": {"ETH": "3000"}, "cache": {}})
+    modules = [
+        "panel_config",
+        "db",
+        "db_schema",
+        "store_facade",
+        "plans_store",
+        "orders_store",
+        "payments_store",
+        "user_store",
+        "node_catalog",
+        "registration_store",
+        "admin_profile",
+        "link_settings",
+    ]
+    for name in modules:
+        if name in sys.modules:
+            importlib.reload(sys.modules[name])
+        else:
+            importlib.import_module(name)
 
-    script = ROOT / "scripts" / "export-sqlite-to-json.py"
-    spec = importlib.util.spec_from_file_location("export_sqlite_to_json", script)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    mod.export_sqlite_to_json(db_path, export_dir)
+    plans_store = sys.modules["plans_store"]
+    orders_store = sys.modules["orders_store"]
+    payments_store = sys.modules["payments_store"]
+    user_store = sys.modules["user_store"]
+    node_catalog = sys.modules["node_catalog"]
+    registration_store = sys.modules["registration_store"]
+    admin_profile = sys.modules["admin_profile"]
+    link_settings = sys.modules["link_settings"]
 
-    plans = json.loads((export_dir / "plans.json").read_text(encoding="utf-8"))
-    orders = json.loads((export_dir / "orders.json").read_text(encoding="utf-8"))
-    payments = json.loads((export_dir / "payments.json").read_text(encoding="utf-8"))
-    assert plans["plans"][0]["id"] == "pro"
-    assert orders["orders"][0]["id"] == "ord_1"
-    assert payments["methods"][0]["id"] == "usdt-bsc"
-    assert payments["payments"][0]["txid"] == "0xabc"
-    assert payments["rates"]["overrides"]["ETH"] == "3000"
+    plan = plans_store.upsert_plan({"id": "sqlite-only", "name": "SQLite Only", "days": 30, "traffic_gb": 100, "price": "10"})
+    order = orders_store.create_pending_order("alice", "new", plan)
+    method = payments_store.upsert_method({"id": "usdt-bsc", "asset": "USDT", "chain": "bsc", "address": "0x2222222222222222222222222222222222222222"})
+    payment = payments_store.create_payment({"order_id": order["id"], "username": "alice", "method_id": method["id"], "asset": "USDT", "chain": "bsc"})
+    users = user_store.load_users()
+    users["users"]["alice"] = {"enabled": True, "sub_token": "sub_alice", "panel_password": {}}
+    user_store.save_users(users)
+    node_catalog.upsert_node({"id": "vless-test", "name": "VLESS Test", "kind": "vless", "enabled": True})
+    registration_store.create_password_reset("alice")
+    admin = admin_profile.get_admin_user()
+    links = link_settings.read()
+
+    assert plans_store.get_plan("sqlite-only")["name"] == "SQLite Only"
+    assert orders_store.get_order(order["id"])["username"] == "alice"
+    assert payments_store.get_payment(payment["id"])["order_id"] == order["id"]
+    assert user_store.get_user("alice")["sub_token"] == "sub_alice"
+    assert node_catalog.get_node("vless-test")["name"] == "VLESS Test"
+    assert registration_store.list_resets()[0]["username"] == "alice"
+    assert admin["role"] == "admin"
+    assert links["vless_address"]
+    assert (tmp_path / "fake-ui.db").exists()
+    for legacy_name in [
+        "plans.json",
+        "orders.json",
+        "payments.json",
+        "users.json",
+        "nodes.json",
+        "registrations.json",
+        "admin_profile.json",
+        "link_settings.json",
+    ]:
+        assert not (tmp_path / legacy_name).exists(), legacy_name

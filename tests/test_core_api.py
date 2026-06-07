@@ -2,6 +2,7 @@
 import json
 import pathlib
 import sys
+from datetime import timedelta
 
 import pytest
 
@@ -216,6 +217,135 @@ def test_admin_can_change_user_plan_and_exact_nodes(app_modules, monkeypatch):
     assert payload["user"]["effective_node_ids"]
     assert "vless-main" in payload["user"]["effective_node_ids"]
     assert "hy2-main" in payload["user"]["effective_node_ids"]
+
+
+def test_new_plan_order_replaces_existing_subscription(app_modules, monkeypatch):
+    user_admin = app_modules["user_admin"]
+    user_store = app_modules["user_store"]
+    plans_store = app_modules["plans_store"]
+    orders_store = app_modules["orders_store"]
+    monkeypatch.setattr(user_admin, "get_xray_user_stat_snapshot", lambda username: {"uplink": 0, "downlink": 0})
+    monkeypatch.setattr(user_admin, "get_hy2_user_stat_snapshot", lambda username, user=None: {"tx": 0, "rx": 0})
+
+    starter = plans_store.upsert_plan(
+        {
+            "id": "starter-replace",
+            "name": "Starter Replace",
+            "days": "30",
+            "traffic_gb": "100",
+            "price": "9",
+            "node_groups": "default",
+        }
+    )
+    vip = plans_store.upsert_plan(
+        {
+            "id": "vip-replace",
+            "name": "VIP Replace",
+            "days": "10",
+            "traffic_gb": "200",
+            "price": "19",
+            "node_groups": "vip",
+        }
+    )
+    user_admin.create_airport_user(
+        "replace_me",
+        starter["days"],
+        panel_password_input="password123",
+        traffic_gb_input=starter["traffic_gb"],
+        plan_id=starter["id"],
+    )
+    users = user_store.load_users()
+    old_exp = (user_store.now_utc() + timedelta(days=90)).isoformat()
+    users["users"]["replace_me"].update(
+        {
+            "expires_at": old_exp,
+            "used_bytes": 50 * 1024 * 1024 * 1024,
+            "quota_exceeded": True,
+            "node_ids": ["vless-main"],
+        }
+    )
+    user_store.save_users(users)
+
+    order = orders_store.create_pending_order("replace_me", "new", vip)
+    result = user_admin.confirm_order(order["id"], operator="admin")
+    user = user_store.get_user("replace_me")
+    new_exp = user_store.parse_time(user["expires_at"])
+    days_left = (new_exp - user_store.now_utc()).total_seconds() / 86400
+
+    assert result["mode"] == "replace"
+    assert user["plan_id"] == "vip-replace"
+    assert user["node_groups"] == ["vip"]
+    assert "node_ids" not in user
+    assert user["quota_bytes"] == 200 * 1024 * 1024 * 1024
+    assert user["used_bytes"] == 0
+    assert user["quota_exceeded"] is False
+    assert 9 <= days_left <= 10
+
+
+def test_renew_order_extends_existing_subscription(app_modules):
+    user_admin = app_modules["user_admin"]
+    user_store = app_modules["user_store"]
+    plans_store = app_modules["plans_store"]
+    orders_store = app_modules["orders_store"]
+
+    plan = plans_store.upsert_plan(
+        {
+            "id": "renew-same",
+            "name": "Renew Same",
+            "days": "30",
+            "traffic_gb": "100",
+            "price": "9",
+            "node_groups": "default",
+        }
+    )
+    user_admin.create_airport_user(
+        "renew_me",
+        plan["days"],
+        panel_password_input="password123",
+        traffic_gb_input=plan["traffic_gb"],
+        plan_id=plan["id"],
+    )
+    users = user_store.load_users()
+    base_exp = user_store.now_utc() + timedelta(days=20)
+    users["users"]["renew_me"]["expires_at"] = base_exp.isoformat()
+    user_store.save_users(users)
+
+    order = orders_store.create_pending_order("renew_me", "renew", plan)
+    result = user_admin.confirm_order(order["id"], operator="admin")
+    user = user_store.get_user("renew_me")
+    new_exp = user_store.parse_time(user["expires_at"])
+
+    assert result["mode"] == "renew"
+    assert (new_exp - base_exp).total_seconds() / 86400 >= 29
+
+
+def test_user_checkout_different_plan_creates_new_order_kind(app_modules):
+    api = app_modules["api"]
+    user_admin = app_modules["user_admin"]
+    plans_store = app_modules["plans_store"]
+
+    starter = plans_store.upsert_plan(
+        {"id": "starter-checkout", "name": "Starter Checkout", "days": "30", "traffic_gb": "100", "price": "9"}
+    )
+    vip = plans_store.upsert_plan(
+        {"id": "vip-checkout", "name": "VIP Checkout", "days": "30", "traffic_gb": "200", "price": "19"}
+    )
+    user_admin.create_airport_user(
+        "checkout_me",
+        starter["days"],
+        panel_password_input="password123",
+        traffic_gb_input=starter["traffic_gb"],
+        plan_id=starter["id"],
+    )
+
+    status, payload = api.handle_post(
+        "/api/orders/create",
+        {"plan_id": vip["id"], "kind": "renew"},
+        {"u": "checkout_me", "r": "user", "role": "user"},
+    )
+
+    assert status == 200
+    assert payload["order"]["kind"] == "new"
 
 
 def test_node_add_disable_delete_flow(app_modules, monkeypatch):

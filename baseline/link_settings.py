@@ -1,5 +1,6 @@
-from json_store import load_json
-from panel_config import DEFAULT_HY2_NAME, DEFAULT_VLESS_ADDRESS, DEFAULT_VLESS_NAME, LINK_SETTINGS_FILE
+import store_facade
+from panel_config import DEFAULT_HY2_NAME, DEFAULT_VLESS_ADDRESS, DEFAULT_VLESS_NAME
+from repositories.sqlite_settings import SQLiteSettingsRepository
 
 
 def defaults():
@@ -12,6 +13,7 @@ def defaults():
 
 
 def read():
+    store_facade.ensure_sqlite()
     data = defaults()
-    data.update(load_json(LINK_SETTINGS_FILE, {}))
+    data.update(SQLiteSettingsRepository().get("link_settings", {}))
     return data

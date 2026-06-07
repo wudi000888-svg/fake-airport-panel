@@ -1,8 +1,6 @@
 import secrets
 from datetime import datetime, timezone
 
-from panel_config import ORDERS_FILE
-from json_store import load_json, save_json
 import store_facade
 from repositories.sqlite_orders import SQLiteOrdersRepository
 
@@ -12,31 +10,21 @@ def now_iso():
 
 
 def load_orders():
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        return {"version": 2, "orders": SQLiteOrdersRepository().list(limit=100000)}
-    return load_json(ORDERS_FILE, {"version": 1, "orders": []}, create=True)
+    store_facade.ensure_sqlite()
+    return {"version": 2, "orders": SQLiteOrdersRepository().list(limit=100000)}
 
 
 def save_orders(data):
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        repo = SQLiteOrdersRepository()
-        for order in (data or {}).get("orders", []):
-            repo.upsert(order)
-        return data
-    save_json(ORDERS_FILE, data)
+    store_facade.ensure_sqlite()
+    repo = SQLiteOrdersRepository()
+    for order in (data or {}).get("orders", []):
+        repo.upsert(order)
+    return data
 
 
 def list_orders(username=None, limit=200):
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        return SQLiteOrdersRepository().list(username=username, limit=limit)
-    orders = load_orders().get("orders", [])
-    if username:
-        orders = [o for o in orders if o.get("username") == username]
-    orders = sorted(orders, key=lambda o: o.get("created_at", ""), reverse=True)
-    return orders[: int(limit or 200)]
+    store_facade.ensure_sqlite()
+    return SQLiteOrdersRepository().list(username=username, limit=limit)
 
 
 def record_order(username, kind, plan=None, amount=0, status="completed", note="", operator="system"):
@@ -54,23 +42,13 @@ def record_order(username, kind, plan=None, amount=0, status="completed", note="
         "operator": operator,
         "created_at": now_iso(),
     }
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        return SQLiteOrdersRepository().upsert(order)
-    data = load_orders()
-    data.setdefault("orders", []).append(order)
-    save_orders(data)
-    return order
+    store_facade.ensure_sqlite()
+    return SQLiteOrdersRepository().upsert(order)
 
 
 def get_order(order_id):
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        return SQLiteOrdersRepository().get(order_id)
-    for order in load_orders().get("orders", []):
-        if order.get("id") == order_id:
-            return order
-    return None
+    store_facade.ensure_sqlite()
+    return SQLiteOrdersRepository().get(order_id)
 
 
 def create_pending_order(username, kind, plan, note="", operator="user"):
@@ -86,15 +64,6 @@ def create_pending_order(username, kind, plan, note="", operator="user"):
 
 
 def update_order(order_id, **updates):
-    if store_facade.use_sqlite():
-        store_facade.ensure_sqlite()
-        updates["updated_at"] = now_iso()
-        return SQLiteOrdersRepository().update(order_id, **updates)
-    data = load_orders()
-    for order in data.get("orders", []):
-        if order.get("id") == order_id:
-            order.update(updates)
-            order["updated_at"] = now_iso()
-            save_orders(data)
-            return order
-    raise RuntimeError("order not found")
+    store_facade.ensure_sqlite()
+    updates["updated_at"] = now_iso()
+    return SQLiteOrdersRepository().update(order_id, **updates)

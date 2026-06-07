@@ -31,7 +31,7 @@ scripts/import-compose-data.sh /path/to/xray-proxy-panel-compose-state.tgz
 
 The compose stack expects at least:
 
-- data/panel/*.json and login/token files
+- data/panel/fake-ui.db, auth.json and login/token files
 - data/xray/config.json
 - data/hysteria2/.env
 - data/hysteria2/server.yaml
@@ -40,4 +40,3 @@ EOF
 
 echo "Compose data directories are ready under: $ROOT_DIR/data"
 echo "Edit .env, then import an existing bundle or provide configs before starting the stack."
-

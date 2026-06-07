@@ -11,14 +11,6 @@ from json_store import save_json
 
 BACKUP_FILES = [
     "auth.json",
-    "users.json",
-    "plans.json",
-    "orders.json",
-    "payments.json",
-    "nodes.json",
-    "admin_profile.json",
-    "registrations.json",
-    "link_settings.json",
     "sub_token.txt",
     "audit.log",
     "subscription_access.log",

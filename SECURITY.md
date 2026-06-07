@@ -7,7 +7,7 @@
 | 类型 | 示例 |
 | --- | --- |
 | 登录凭据 | 管理员密码、用户初始密码、临时 SSH key |
-| 真实运行数据 | `data/`、`auth.json`、`users.json`、`nodes.json` |
+| 真实运行数据 | `data/`、`auth.json`、`fake-ui.db`、`fake-ui.db-wal`、`fake-ui.db-shm` |
 | 证书和密钥 | `.pem`、TLS 私钥、Reality private key |
 | 生产配置 | `.env`、`.env.production`、真实域名和代理账号 |
 

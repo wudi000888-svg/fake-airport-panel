@@ -356,6 +356,41 @@ def create_or_renew_from_plan(username, plan_id, password="", note="", operator=
     return {"mode": "create", **result}
 
 
+def replace_subscription_from_plan(username, plan_id, operator="admin"):
+    plan = plans_store.get_plan(plan_id)
+    if not plan:
+        raise RuntimeError("plan not found")
+    username = str(username or "").strip()
+    data = user_store.load_users()
+    users = data.setdefault("users", {})
+    user = users.get(username)
+    if not user:
+        result = create_airport_user(
+            username,
+            plan.get("days", 30),
+            traffic_gb_input=plan.get("traffic_gb", 0),
+            plan_id=plan_id,
+            operator=operator,
+        )
+        return {"mode": "create", **result}
+
+    user["enabled"] = True
+    user["plan_id"] = plan.get("id", "")
+    user["node_groups"] = plan.get("node_groups", ["default"])
+    user.pop("node_ids", None)
+    user["expires_at"] = user_store.make_expiry(plan.get("days", 30))
+    user["quota_bytes"] = user_store.traffic_gb_to_bytes(plan.get("traffic_gb", 0))
+    user["used_bytes"] = 0
+    user["quota_exceeded"] = False
+    user["last_xray_stats"] = get_xray_user_stat_snapshot(username)
+    user["last_hy2_stats"] = get_hy2_user_stat_snapshot(username, user)
+    user_store.save_users(data)
+    enforce_users_now()
+    orders_store.record_order(username, "replace", plan=plan, amount=plan.get("price", 0), note="replace subscription", operator=operator)
+    audit_log.write(operator, "user.replace_plan", username, {"plan_id": plan_id})
+    return {"mode": "replace", "username": username}
+
+
 def confirm_order(order_id, operator="admin"):
     order = orders_store.get_order(order_id)
     if not order:
@@ -363,7 +398,10 @@ def confirm_order(order_id, operator="admin"):
     if order.get("status") != "pending":
         raise RuntimeError("order is not pending")
     plan_id = order.get("plan_id", "")
-    result = create_or_renew_from_plan(order.get("username", ""), plan_id, note="manual order", operator=operator)
+    if order.get("kind") in {"new", "create", "replace"}:
+        result = replace_subscription_from_plan(order.get("username", ""), plan_id, operator=operator)
+    else:
+        result = create_or_renew_from_plan(order.get("username", ""), plan_id, note="manual order", operator=operator)
     orders_store.update_order(order_id, status="completed", confirmed_at=user_store.now_utc().isoformat(), confirmed_by=operator)
     audit_log.write(operator, "order.confirm", order_id, {"username": order.get("username"), "plan_id": plan_id})
     return result

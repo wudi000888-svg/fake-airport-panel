@@ -34,7 +34,7 @@ export async function handlePaymentAction(button, app, { runAction }) {
     const methodId = selector?.value || "";
     await runAction(async () => {
       if (!methodId) throw new Error("请选择付款方式");
-      const out = await post("/api/orders/create", { plan_id: planId, kind: "renew", note: "self-service checkout" });
+      const out = await post("/api/orders/create", { plan_id: planId, note: "self-service checkout" });
       const paymentOut = await post("/api/payments/create", { order_id: out.order.id, method_id: methodId });
       state.route = "orders";
       history.pushState(null, "", "/orders");
@@ -45,7 +45,7 @@ export async function handlePaymentAction(button, app, { runAction }) {
   if (actionName === "buy-plan") {
     const planId = button.dataset.plan || "";
     await runAction(async () => {
-      const out = await post("/api/orders/create", { plan_id: planId, kind: "renew", note: "self-service checkout" });
+      const out = await post("/api/orders/create", { plan_id: planId, note: "self-service checkout" });
       const method = firstEnabledPaymentMethod();
       if (method) {
         await post("/api/payments/create", { order_id: out.order.id, method_id: method.id });

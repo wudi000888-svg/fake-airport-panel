@@ -26,6 +26,7 @@ def test_demo_viewer_login_user_exists(tmp_path, monkeypatch):
 
     auth = auth_store.load_auth()
     users = user_store.load_users()["users"]
+    panel_dir = tmp_path / "panel"
     demo_usernames = [
         username
         for username, item in auth.get("users", {}).items()
@@ -33,3 +34,15 @@ def test_demo_viewer_login_user_exists(tmp_path, monkeypatch):
     ]
     assert demo_usernames
     assert all(username in users for username in demo_usernames)
+    assert (panel_dir / "fake-ui.db").exists()
+    for legacy_name in [
+        "plans.json",
+        "orders.json",
+        "payments.json",
+        "users.json",
+        "nodes.json",
+        "registrations.json",
+        "admin_profile.json",
+        "link_settings.json",
+    ]:
+        assert not (panel_dir / legacy_name).exists(), legacy_name
