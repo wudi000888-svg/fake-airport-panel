@@ -164,7 +164,10 @@ def nodes_for_user(user, kind=None, include_disabled=False):
         exact_ids = []
     exact_set = set(exact_ids)
 
-    groups = (user or {}).get("node_groups") or ["default"]
+    if "node_groups" in (user or {}) and not (user or {}).get("node_groups"):
+        groups = []
+    else:
+        groups = (user or {}).get("node_groups") or ["default"]
     if isinstance(groups, str):
         groups = [groups]
     result = []
@@ -191,7 +194,7 @@ def allowed_kinds_for_user(user):
             allowed.append(node.get("kind"))
     if allowed:
         return allowed
-    if (user or {}).get("node_ids"):
+    if (user or {}).get("node_ids") or ("node_groups" in (user or {}) and not (user or {}).get("node_groups")):
         return []
     return ["vless", "hy2"]
 

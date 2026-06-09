@@ -34,6 +34,7 @@ function paymentMethodsSettings(methods) {
 
 export function renderAdminSettings(data = {}) {
   const methods = data.payment_methods || [];
+  const publicSettings = data.public_settings || {};
   return `
     <section class="screen stack">
       <div class="screen-head">
@@ -43,6 +44,18 @@ export function renderAdminSettings(data = {}) {
       <article class="admin-card">
         <div><strong>缓存</strong><span>Dashboard / RPC / 汇率</span></div>
         <button class="secondary" data-action="cache-clear" type="button">清理缓存</button>
+      </article>
+      <article class="admin-card">
+        <div><strong>公开注册</strong><span>${publicSettings.registration_enabled ? "已开启" : "已关闭"}</span></div>
+        <form class="form-grid" data-form="public-settings-save">
+          <label>允许用户注册
+            <select name="registration_enabled">
+              <option value="false" ${publicSettings.registration_enabled ? "" : "selected"}>关闭</option>
+              <option value="true" ${publicSettings.registration_enabled ? "selected" : ""}>开启</option>
+            </select>
+          </label>
+          <button class="secondary" type="submit">保存公开设置</button>
+        </form>
       </article>
       <article class="admin-card payment-method-form" hidden>
         <div>

@@ -11,6 +11,7 @@ import node_catalog
 import orders_store
 import payments_store
 import plans_store
+import public_settings
 import registration_store
 import subscription_guard
 import user_store
@@ -185,6 +186,7 @@ def dashboard(session):
                 "nodes": node_catalog.list_public_nodes(admin=True),
                 "audit": audit_log.tail(80),
                 "backups": backup_manager.list_backups(20),
+                "public_settings": public_settings.read(),
                 "registrations": registration_store.list_registrations(),
                 "password_resets": registration_store.list_resets(),
                 "subscription_access": subscription_guard.tail(120),
@@ -202,4 +204,5 @@ def dashboard(session):
         payload["nodes"] = visible_nodes_for_user(user) if user else []
         payload["payment_methods"] = payments_store.list_methods(admin=False)
         payload["payments"] = payments_store.list_payments(username=username, admin=False, limit=30)
+        payload["public_settings"] = public_settings.read()
     return payload

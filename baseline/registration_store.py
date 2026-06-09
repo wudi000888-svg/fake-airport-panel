@@ -34,8 +34,7 @@ def save_data(data):
     return data
 
 
-def create_registration(username, password, email="", plan_id="", note=""):
-    store_facade.ensure_sqlite()
+def build_registration_item(username, password, email="", plan_id="", note=""):
     username = username.strip()
     if not username:
         raise RuntimeError("username is required")
@@ -55,6 +54,12 @@ def create_registration(username, password, email="", plan_id="", note=""):
         "created_at": now_iso(),
         "expires_at": (now_utc() + timedelta(days=7)).isoformat(),
     }
+    return item
+
+
+def create_registration(username, password, email="", plan_id="", note=""):
+    store_facade.ensure_sqlite()
+    item = build_registration_item(username, password, email, plan_id, note)
     SQLiteRegistrationsRepository().upsert(item)
     return {k: v for k, v in item.items() if k != "password"}
 

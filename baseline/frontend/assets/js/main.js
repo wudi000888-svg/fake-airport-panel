@@ -28,10 +28,13 @@ export async function render() {
 
 async function boot() {
   try {
+    const publicSettings = await api("/api/public-settings");
+    state.publicSettings = publicSettings.public_settings || {};
     const sessionResult = await api("/api/session");
     state.session = sessionResult.session;
     if (state.session) {
       state.shell = await api("/api/app-shell");
+      state.publicSettings = state.shell.public_settings || state.publicSettings;
       await refresh();
     }
   } catch (error) {

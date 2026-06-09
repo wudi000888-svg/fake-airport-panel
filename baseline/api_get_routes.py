@@ -27,6 +27,8 @@ def handle_get(path, session):
 
     if clean == "/api/session":
         return ok(session=ops.public_session(session))
+    if clean == "/api/public-settings":
+        return ok(public_settings=ops.get_public_settings())
     if not session:
         return api_error("not authenticated", 401)
 

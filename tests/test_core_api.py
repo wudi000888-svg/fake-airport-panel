@@ -26,6 +26,7 @@ MODULES_TO_RELOAD = [
     "payment_verifier",
     "payment_service",
     "registration_store",
+    "public_settings",
     "admin_profile",
     "audit_log",
     "backup_manager",
@@ -121,6 +122,48 @@ def test_api_auth_and_public_routes(app_modules):
 
     status, payload = api.handle_post("/api/login", {"username": "admin", "password": "wrong"}, None)
     assert status == 401
+
+
+def test_public_registration_is_disabled_by_default(app_modules):
+    api = app_modules["api"]
+
+    status, payload = api.handle_post(
+        "/api/register",
+        {"username": "newbie", "password": "password123", "email": "n@example.test"},
+        None,
+    )
+
+    assert status == 403
+    assert payload["ok"] is False
+
+
+def test_enabled_public_registration_creates_no_plan_user_and_logs_in(app_modules):
+    api = app_modules["api"]
+    user_store = app_modules["user_store"]
+    ops = app_modules["operations_service"]
+
+    ops.update_public_settings({"registration_enabled": True})
+
+    status, payload = api.handle_post(
+        "/api/register",
+        {"username": "newbie", "password": "password123", "email": "n@example.test"},
+        None,
+    )
+
+    assert status == 200
+    assert payload["session"]["username"] == "newbie"
+    assert payload["session"]["role"] == "user"
+    assert payload["token"]
+    user = user_store.get_user("newbie")
+    assert user["plan_id"] == ""
+    assert user["node_groups"] == []
+    assert user["node_ids"] == []
+    assert user["quota_bytes"] == 0
+    assert user["expires_at"] == ""
+
+    status, session_payload = api.handle_get("/api/session", {"u": "newbie", "r": "user", "role": "user", "csrf": "csrf"})
+    assert status == 200
+    assert session_payload["session"]["username"] == "newbie"
 
 
 def test_user_create_and_node_assignment(app_modules):

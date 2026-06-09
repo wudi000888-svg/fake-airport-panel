@@ -36,8 +36,19 @@ export function bindAppActions(app, { refresh, render }) {
         const result = await post("/api/login", data);
         state.session = result.session;
         state.shell = await api("/api/app-shell");
+        state.publicSettings = state.shell.public_settings || state.publicSettings;
         await refresh();
         setNotice("登录成功", "success");
+        await render();
+        return;
+      }
+      if (form.dataset.form === "register") {
+        const result = await post("/api/register", data);
+        state.session = result.session;
+        state.shell = await api("/api/app-shell");
+        state.publicSettings = state.shell.public_settings || state.publicSettings;
+        await refresh();
+        setNotice("注册成功", "success");
         await render();
         return;
       }

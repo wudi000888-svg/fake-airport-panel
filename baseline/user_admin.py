@@ -183,6 +183,47 @@ def create_airport_user(
     return result
 
 
+def create_self_registered_user(username, password_hash, email="", note="", operator="self-register"):
+    username = str(username or "").strip()
+    if not username:
+        raise RuntimeError("用户名不能为空。")
+    if not username.replace("_", "").replace("-", "").isalnum():
+        raise RuntimeError("用户名只能包含字母、数字、下划线和短横线。")
+    if not password_hash:
+        raise RuntimeError("用户登录密码不能为空。")
+
+    data = user_store.load_users()
+    users = data.setdefault("users", {})
+    if username in users:
+        raise RuntimeError("用户已存在。")
+
+    sub_token = secrets.token_hex(24)
+    users[username] = {
+        "enabled": True,
+        "role": "user",
+        "panel_password": password_hash,
+        "vless_uuid": str(uuid.uuid4()),
+        "vless_node_uuids": {},
+        "sub_token": sub_token,
+        "expires_at": "",
+        "created_at": user_store.now_utc().isoformat(),
+        "note": note or f"self registration {email}".strip(),
+        "plan_id": "",
+        "node_groups": [],
+        "node_ids": [],
+        "quota_bytes": 0,
+        "used_bytes": 0,
+        "quota_exceeded": False,
+        "last_xray_stats": {"uplink": 0, "downlink": 0},
+        "hy2_username": username,
+        "hy2_password": secrets.token_urlsafe(18),
+        "last_hy2_stats": {"tx": 0, "rx": 0},
+    }
+    user_store.save_users(data)
+    audit_log.write(operator, "user.self_register", username, {"email": email})
+    return {"username": username, "sub_token": sub_token}
+
+
 def airport_user_action(username, action, days="30", quota_gb="", plan_id="", operator="admin", node_ids=None):
     username = username.strip()
     data = user_store.load_users()

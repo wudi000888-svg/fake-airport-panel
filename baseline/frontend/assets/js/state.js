@@ -6,6 +6,7 @@ function routeFromLocation() {
 export const state = {
   session: null,
   shell: null,
+  publicSettings: {},
   route: routeFromLocation(),
   data: {},
   filters: {},

@@ -37,6 +37,11 @@ def handle_post(path, data, session):
         result["clear_session"] = True
         return ok(**result)
 
+    if clean == "/api/public-settings":
+        if (err := require_admin(session)):
+            return err
+        return ok(public_settings=ops.update_public_settings(data))
+
     if not is_admin(session):
         if clean in {"/api/orders/create", "/api/orders/action"}:
             return handle_user_post(clean, data, session)

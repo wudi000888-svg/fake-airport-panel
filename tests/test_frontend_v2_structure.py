@@ -51,6 +51,20 @@ def test_frontend_v2_main_is_modular_entrypoint():
     assert 'app.addEventListener("submit"' not in main
 
 
+def test_frontend_exposes_self_registration_and_admin_toggle():
+    login = read_asset("js/components/login.js")
+    handlers = read_asset("js/actions/handlers.js")
+    settings = read_asset("js/pages/admin/settings.js")
+    admin_actions = read_asset("js/actions/admin.js")
+
+    assert 'data-form="register"' in login
+    assert 'state.publicSettings?.registration_enabled' in login
+    assert 'post("/api/register"' in handlers
+    assert 'name="registration_enabled"' in settings
+    assert 'data-form="public-settings-save"' in settings
+    assert 'post("/api/public-settings"' in admin_actions
+
+
 def test_frontend_v2_actions_are_split_by_domain():
     handlers = read_asset("js/actions/handlers.js")
     assert len(handlers.splitlines()) < 180

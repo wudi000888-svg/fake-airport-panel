@@ -78,6 +78,18 @@ export async function handleAdminAction(button, app, { runAction }) {
 
 
 export async function handleAdminForm(form, data, app, { runAction }) {
+  if (form.dataset.form === "public-settings-save") {
+    await runAction(async () => {
+      const out = await post("/api/public-settings", {
+        registration_enabled: data.registration_enabled === "true",
+      });
+      state.data.public_settings = out.public_settings || {};
+      state.publicSettings = out.public_settings || {};
+      if (state.shell) state.shell.public_settings = state.publicSettings;
+      return "公开设置已保存";
+    });
+    return true;
+  }
   if (form.dataset.form === "backup-import") {
     await runAction(async () => {
       const file = form.elements.backup_file?.files?.[0];

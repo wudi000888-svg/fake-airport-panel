@@ -1,5 +1,6 @@
 import cache_store
 import dashboard_service
+import public_settings
 import user_store
 from app_version import APP_VERSION
 from api_common import ok, require_admin
@@ -49,6 +50,7 @@ def shell_payload(session):
         "version": APP_VERSION,
         "nav": ADMIN_NAV if role == "admin" else USER_NAV,
         "secondary_nav": ADMIN_EXTENDED_NAV if role == "admin" else [],
+        "public_settings": public_settings.read(),
     }
 
 
