@@ -1,8 +1,10 @@
 export async function api(path, options = {}) {
+  const csrf = window.localStorage.getItem("fake-ui-csrf") || "";
   const init = {
     method: options.method || "GET",
     headers: { "Content-Type": "application/json" },
   };
+  if (csrf && init.method !== "GET") init.headers["X-CSRF-Token"] = csrf;
   if (options.body !== undefined) {
     init.body = JSON.stringify(options.body);
   }
@@ -16,6 +18,8 @@ export async function api(path, options = {}) {
   if (!response.ok || data.ok === false) {
     throw new Error(data.error || `HTTP ${response.status}`);
   }
+  const token = data.csrf_token || data.session?.csrf_token || data.data?.session?.csrf_token;
+  if (token) window.localStorage.setItem("fake-ui-csrf", token);
   return data;
 }
 

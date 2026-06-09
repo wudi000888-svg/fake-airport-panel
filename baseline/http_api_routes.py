@@ -1,4 +1,5 @@
 import api
+import security
 
 
 def handle_get(handler):
@@ -19,7 +20,14 @@ def handle_get(handler):
 
 def handle_post(handler):
     try:
-        status, payload = api.handle_post(handler.path, handler.read_json_or_form(), handler.current_session())
+        session = handler.current_session()
+        csrf_error = None
+        if handler.path != "/api/login":
+            csrf_error = security.csrf_error_for(handler, session)
+        if csrf_error is not None:
+            status, payload = csrf_error
+        else:
+            status, payload = api.handle_post(handler.path, handler.read_json_or_form(), session)
     except Exception as exc:
         status, payload = api.api_error(str(exc), 400)
     handler.respond_json(payload, status)

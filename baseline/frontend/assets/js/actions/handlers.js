@@ -98,6 +98,7 @@ export function bindAppActions(app, { refresh, render }) {
       if (await handleAdminAction(button, app, context)) return;
       if (button.dataset.action === "logout") {
         await post("/api/logout", {});
+        window.localStorage.removeItem("fake-ui-csrf");
         state.session = null;
         state.shell = null;
         state.data = {};

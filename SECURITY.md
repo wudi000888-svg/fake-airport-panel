@@ -26,3 +26,13 @@
 | 订阅链接 | 定期轮换订阅 token，发现泄露后立即重置 |
 | 防火墙 | 只开放必要端口，例如 80、443、Reality/HY2 所需端口 |
 | 备份 | 备份文件应离线保存，不要放在 Web 根目录 |
+
+## 面板加固建议
+
+| 项目 | 建议 |
+| --- | --- |
+| Cookie | 生产环境必须使用 HTTPS，面板会设置 `HttpOnly`、`Secure` 和 `SameSite=Lax` |
+| CSRF | 已登录 API 写操作需要 `X-CSRF-Token`，前端会从登录/session 响应中自动携带 |
+| 登录防护 | 同一 IP 和用户名的失败登录会被短时间限速，登录成功/失败会写入审计日志 |
+| 反代安全头 | Nginx 模板包含 HSTS、`X-Frame-Options`、`X-Content-Type-Options`、`Referrer-Policy` 和 `Permissions-Policy` |
+| 生产暴露 | 面板进程只监听 `127.0.0.1:9100`，不要直接暴露该端口到公网 |

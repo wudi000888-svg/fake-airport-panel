@@ -1,5 +1,16 @@
 # 更新日志
 
+## v2.1.1
+
+| 类型 | 内容 |
+| --- | --- |
+| 安全 | 面板 session cookie 增加 `Secure`，继续保留 `HttpOnly` 和 `SameSite=Lax` |
+| 安全 | 已登录 API 写操作要求 `X-CSRF-Token`，旧版不含 CSRF 的 session 直接失效并要求重新登录 |
+| 安全 | 登录失败增加 IP+用户名维度限速，并把成功、失败、限速事件写入审计日志 |
+| 安全 | Python 面板和 Nginx 模板补充安全响应头，包括 HSTS、CSP、X-Frame-Options、nosniff、Referrer-Policy 和 Permissions-Policy |
+| 前端 | 登录/session 响应自动保存 CSRF Token，后续非 GET API 请求自动携带 |
+| 文档 | 更新 SECURITY 和发布说明，明确生产环境仍需 HTTPS、反代安全头、备份加密和最小权限部署 |
+
 ## v2.1.0
 
 | 类型 | 内容 |

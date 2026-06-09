@@ -21,6 +21,7 @@ MODULES_TO_RELOAD = [
     "orders_store",
     "payments_store",
     "payment_rates",
+    "security",
     "payment_wallets",
     "payment_verifier",
     "payment_service",
@@ -551,6 +552,77 @@ def test_http_api_get_converts_exceptions_to_json_errors(app_modules, monkeypatc
     assert captured["status"] == 400
     assert captured["payload"]["ok"] is False
     assert captured["payload"]["error"] == "boom"
+
+
+def test_session_cookie_and_security_headers(app_modules):
+    import auth_store
+    import security
+    from web_handler import PanelRequestHandler
+
+    token = auth_store.make_session("admin", "admin")
+    assert "HttpOnly" in security.session_cookie(token)
+    assert "Secure" in security.session_cookie(token)
+    assert "SameSite=Lax" in security.session_cookie(token)
+    headers = security.security_headers("text/html; charset=utf-8")
+    assert headers["X-Frame-Options"] == "DENY"
+    assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
+    assert hasattr(PanelRequestHandler, "send_security_headers")
+
+
+def test_legacy_session_without_csrf_is_rejected(app_modules):
+    import auth_store
+
+    payload = auth_store.b64e(b'{"u":"admin","r":"admin","t":9999999999,"n":"legacy"}')
+    token = f"{payload}.{auth_store.sign(payload, 'test-secret')}"
+
+    assert auth_store.session_payload(token) is None
+
+
+def test_login_rate_limit_tracks_failures(app_modules):
+    import security
+
+    key = "203.0.113.9:admin"
+    security.clear_login_failures(key)
+    for _ in range(security.LOGIN_MAX_ATTEMPTS):
+        assert security.login_limited(key, now=1000) is False
+        security.record_login_failure(key, now=1000)
+    assert security.login_limited(key, now=1000) is True
+    security.clear_login_failures(key)
+    assert security.login_limited(key, now=1000) is False
+
+
+def test_http_api_post_requires_csrf_for_authenticated_sessions(app_modules, monkeypatch):
+    import http_api_routes
+
+    captured = {}
+
+    class FakeHandler:
+        path = "/api/cache/clear"
+        headers = {}
+
+        def __init__(self, csrf_header=""):
+            self.headers = {}
+            if csrf_header:
+                self.headers["X-CSRF-Token"] = csrf_header
+
+        def current_session(self):
+            return {"u": "admin", "r": "admin", "role": "admin", "csrf": "csrf-token"}
+
+        def read_json_or_form(self):
+            return {}
+
+        def respond_json(self, payload, status):
+            captured["payload"] = payload
+            captured["status"] = status
+
+    http_api_routes.handle_post(FakeHandler())
+    assert captured["status"] == 403
+    assert captured["payload"]["error"] == "csrf validation failed"
+
+    monkeypatch.setattr(http_api_routes.api, "handle_post", lambda path, data, session: (200, {"ok": True}))
+    http_api_routes.handle_post(FakeHandler("csrf-token"))
+    assert captured["status"] == 200
+    assert captured["payload"]["ok"] is True
 
 
 def test_admin_can_manage_plans(app_modules):

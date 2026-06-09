@@ -93,8 +93,9 @@ def authenticate_user(username, password):
 
 def make_session(username, role):
     auth = load_auth()
+    csrf = secrets.token_urlsafe(24)
     payload = json.dumps(
-        {"u": username, "r": role, "t": now(), "n": secrets.token_urlsafe(8)},
+        {"u": username, "r": role, "t": now(), "n": secrets.token_urlsafe(8), "csrf": csrf},
         separators=(",", ":"),
     )
     payload_b64 = b64e(payload.encode())
@@ -112,6 +113,8 @@ def session_payload(token):
 
         payload = json.loads(b64d(payload_b64).decode())
         if now() - int(payload.get("t", 0)) > SESSION_TTL:
+            return None
+        if not payload.get("csrf"):
             return None
 
         username = payload.get("u", "")

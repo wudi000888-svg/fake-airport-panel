@@ -11,7 +11,7 @@ import http_legacy_ui_routes
 import http_qr_routes
 import http_static_routes
 import http_subscription_routes
-from panel_config import SESSION_TTL
+import security
 
 
 class PanelRequestHandler(BaseHTTPRequestHandler):
@@ -41,20 +41,28 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_security_headers("text/html")
         self.end_headers()
         self.wfile.write(raw)
 
     def respond_json(self, payload, status=200):
+        token = payload.get("token") if isinstance(payload, dict) else None
+        if token:
+            session = auth_store.session_payload(token) or {}
+            csrf = security.csrf_token_for_session(session)
+            payload.setdefault("csrf_token", csrf)
         raw = api.json_bytes(payload)
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
-        token = payload.get("token") if isinstance(payload, dict) else None
         if token:
-            self.send_header("Set-Cookie", f"panel_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={SESSION_TTL}")
+            self.send_header("Set-Cookie", security.session_cookie(token))
+            self.send_header("Set-Cookie", security.csrf_cookie(payload.get("csrf_token", "")))
         if isinstance(payload, dict) and payload.get("clear_session"):
-            self.send_header("Set-Cookie", "panel_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
+            self.send_header("Set-Cookie", security.clear_session_cookie())
+            self.send_header("Set-Cookie", "panel_csrf=; Path=/; Max-Age=0; Secure; SameSite=Lax")
+        self.send_security_headers("application/json")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -68,6 +76,7 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", api.content_type(path))
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_security_headers(api.content_type(path))
         self.end_headers()
         self.wfile.write(raw)
 
@@ -77,6 +86,7 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_security_headers("text/plain")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -87,6 +97,7 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
+        self.send_security_headers("text/plain")
         for k, v in headers.items():
             self.send_header(str(k), str(v).encode("ascii", "ignore").decode("ascii"))
         self.end_headers()
@@ -98,6 +109,7 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Cache-Control", "no-store")
+        self.send_security_headers(content_type)
         for k, v in headers.items():
             self.send_header(str(k), str(v).encode("ascii", "ignore").decode("ascii"))
         self.end_headers()
@@ -106,7 +118,12 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
     def redirect(self, location):
         self.send_response(302)
         self.send_header("Location", location)
+        self.send_security_headers()
         self.end_headers()
+
+    def send_security_headers(self, content_type=""):
+        for k, v in security.security_headers(content_type).items():
+            self.send_header(k, v)
 
     def get_cookie_token(self):
         c = cookies.SimpleCookie(self.headers.get("Cookie", ""))

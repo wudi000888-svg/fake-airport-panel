@@ -20,7 +20,7 @@ import xray_panel
 def public_session(payload):
     if not payload:
         return None
-    return {"username": payload.get("u", ""), "role": payload.get("role") or payload.get("r", "")}
+    return {"username": payload.get("u", ""), "role": payload.get("role") or payload.get("r", ""), "csrf_token": payload.get("csrf", "")}
 
 
 def user_metrics(username, user):

@@ -409,7 +409,7 @@ PANEL_IMAGE=xray-proxy-panel:local
 HYSTERIA_IMAGE=tobyxdd/hysteria:latest
 NGINX_IMAGE=nginx:1.27-alpine
 CERTBOT_IMAGE=certbot/certbot:latest
-FAKE_UI_VERSION=2.1.0
+FAKE_UI_VERSION=2.1.1
 FAKE_UI_DB=/data/panel/fake-ui.db
 EOF
 }
