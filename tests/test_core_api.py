@@ -953,6 +953,61 @@ def test_admin_can_manage_plans(app_modules):
     assert plans_store.get_plan("pro-plan") is None
 
 
+def test_user_plan_name_tracks_plan_rename(app_modules):
+    api = app_modules["api"]
+    user_admin = app_modules["user_admin"]
+
+    status, payload = api.handle_post(
+        "/api/plans/save",
+        {
+            "id": "rename-plan",
+            "name": "Original Name",
+            "days": "30",
+            "traffic_gb": "100",
+            "price": "9",
+            "node_groups": "default",
+            "enabled": True,
+        },
+        admin_session(app_modules),
+    )
+    assert status == 200
+    user_admin.create_airport_user(
+        "rename_user",
+        "30",
+        panel_password_input="password123",
+        traffic_gb_input="100",
+        plan_id="rename-plan",
+    )
+
+    status, payload = api.handle_post(
+        "/api/plans/save",
+        {
+            "id": "rename-plan",
+            "name": "Renamed Plan",
+            "days": "30",
+            "traffic_gb": "100",
+            "price": "9",
+            "node_groups": "default",
+            "enabled": True,
+        },
+        admin_session(app_modules),
+    )
+    assert status == 200
+
+    status, users_payload = api.handle_get("/api/users", admin_session(app_modules))
+    assert status == 200
+    user_item = next(item for item in users_payload["users"] if item["username"] == "rename_user")
+    assert user_item["plan_name"] == "Renamed Plan"
+    assert user_item["metrics"]["plan_name"] == "Renamed Plan"
+
+    status, dashboard_payload = api.handle_get(
+        "/api/dashboard",
+        {"u": "rename_user", "r": "user", "role": "user"},
+    )
+    assert status == 200
+    assert dashboard_payload["data"]["profile"]["plan_name"] == "Renamed Plan"
+
+
 def test_non_admin_cannot_manage_plans(app_modules):
     api = app_modules["api"]
     session = {"u": "viewer", "r": "user", "role": "user"}

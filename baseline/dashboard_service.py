@@ -72,6 +72,7 @@ def effective_node_ids_for_user(user):
 def user_summary(username, user):
     sub_token = user.get("sub_token", "")
     base_sub = app_urls.subscription_url(sub_token) if sub_token else ""
+    metrics = user_metrics(username, user)
     return {
         "username": username,
         "enabled": bool(user.get("enabled", True)),
@@ -80,10 +81,11 @@ def user_summary(username, user):
         "note": user.get("note", ""),
         "quota": user_store.quota_text(user),
         "quota_status": user_store.quota_status_text(user),
-        "metrics": user_metrics(username, user),
+        "metrics": metrics,
         "used_bytes": int(user.get("used_bytes", 0) or 0),
         "quota_bytes": int(user.get("quota_bytes", 0) or 0),
         "plan_id": user.get("plan_id", ""),
+        "plan_name": metrics.get("plan_name", ""),
         "node_groups": user.get("node_groups", ["default"]),
         "node_ids": user.get("node_ids", []),
         "effective_node_ids": effective_node_ids_for_user(user),
