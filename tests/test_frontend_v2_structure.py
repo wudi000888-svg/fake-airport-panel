@@ -1,9 +1,13 @@
 import re
+import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "baseline" / "frontend" / "assets"
+BASELINE = ROOT / "baseline"
+if str(BASELINE) not in sys.path:
+    sys.path.insert(0, str(BASELINE))
 
 
 def read_asset(path):
@@ -18,8 +22,11 @@ def test_frontend_v2_modules_exist_and_index_uses_module_entry():
     index = (ROOT / "baseline" / "frontend" / "index.html").read_text(encoding="utf-8")
     assert 'type="module"' in index
     assert "assets/js/main.js" in index
+    assert 'rel="icon"' in index
+    assert "favicon.svg" in index
 
     for path in [
+        "favicon.svg",
         "js/main.js",
         "js/api.js",
         "js/state.js",
@@ -31,6 +38,7 @@ def test_frontend_v2_modules_exist_and_index_uses_module_entry():
         "js/actions/orders.js",
         "js/actions/payments.js",
         "js/actions/users_nodes.js",
+        "js/components/charts.js",
         "js/components/layout.js",
         "js/components/login.js",
         "js/pages/registry.js",
@@ -41,6 +49,16 @@ def test_frontend_v2_modules_exist_and_index_uses_module_entry():
         "css/components.css",
     ]:
         assert (ASSETS / path).exists(), path
+
+
+def test_frontend_serves_favicon_without_404():
+    import http_utils
+
+    path = http_utils.frontend_file_for_path("/favicon.ico")
+
+    assert path is not None
+    assert path.name == "favicon.svg"
+    assert path.exists()
 
 
 def test_frontend_v2_main_is_modular_entrypoint():
@@ -123,6 +141,24 @@ def test_frontend_v2_uses_dashboard_compatibility_layer():
     assert "fake-ui:navigate" in main
 
 
+def test_frontend_v2_boot_errors_render_authenticated_recovery_screen():
+    main = read_asset("js/main.js")
+    state = read_asset("js/state.js")
+    ui = read_asset("js/components/ui.js")
+    handlers = read_asset("js/actions/handlers.js")
+    css = read_asset("css/components.css")
+
+    assert "bootError: null" in state
+    assert "function setBootError" in state
+    assert "renderAppError" in ui
+    assert "state.bootError && state.session" in main
+    assert "await loadAuthenticatedApp()" in main
+    assert "setBootError(error.message)" in main
+    assert 'data-action="retry-boot"' in ui
+    assert 'button.dataset.action === "retry-boot"' in handlers
+    assert "app-error-screen" in css
+
+
 def test_frontend_v2_user_pages_have_mobile_commercial_flows():
     assets = ASSETS / "js" / "pages" / "user"
     expected = ["dashboard.js", "orders.js", "plans.js", "links.js", "account.js"]
@@ -171,6 +207,49 @@ def test_frontend_v2_admin_pages_use_task_cards_and_bottom_sheets():
     assert 'data-action="backup-create"' in backups
     assert 'data-action="backup-download"' in backups
     assert 'data-form="backup-import"' in backups
+
+
+def test_frontend_v2_admin_dashboard_uses_commercial_metrics_layout():
+    overview = read_asset("js/pages/admin/overview.js")
+    charts = read_asset("js/components/charts.js")
+    layout = read_asset("js/components/layout.js")
+    css = read_asset("css/components.css") + read_asset("css/layout.css")
+
+    assert "commercial-dashboard" in overview
+    assert "metric-card" in overview
+    assert "trafficLineChart" in overview
+    assert "donutChart" in overview
+    assert "user-traffic-rank" in overview
+    assert "traffic-toolbar" in overview
+    assert "traffic_total_bytes" in overview
+    assert "canvas" in charts
+    assert "renderLineChart" in charts
+    assert "renderDonutChart" in charts
+    assert "sidebar-logo" in layout
+    assert "管理控制台" in layout
+    assert "metric-card" in css
+    assert "chart-panel" in css
+
+
+def test_frontend_v2_charts_fail_soft_when_canvas_context_is_unavailable():
+    charts = read_asset("js/components/charts.js")
+
+    assert "canvas.getContext(\"2d\")" in charts
+    assert "if (!ctx)" in charts
+    assert "chart-fallback" in charts
+    assert "renderCharts(root = document)" in charts
+    assert "try {" in charts
+    assert "catch" in charts
+
+
+def test_frontend_v2_admin_users_show_visual_traffic_usage():
+    users = read_asset("js/pages/admin/users.js")
+    css = read_asset("css/components.css")
+
+    assert "traffic-progress" in users
+    assert "used_percent" in users
+    assert "今日流量" in users
+    assert "traffic-progress" in css
 
 
 def test_frontend_v2_admin_hy2_page_has_real_controls():

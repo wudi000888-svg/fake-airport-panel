@@ -42,6 +42,8 @@ def frontend_file_for_path(path):
     clean = urllib.parse.urlparse(path).path
     if clean in SPA_ROUTES:
         return FRONTEND_DIR / "index.html"
+    if clean in {"/favicon.ico", "/favicon.svg"}:
+        return FRONTEND_DIR / "assets" / "favicon.svg"
     if clean.startswith("/assets/"):
         rel = clean.lstrip("/")
         candidate = (FRONTEND_DIR / rel).resolve()
@@ -65,4 +67,3 @@ def content_type(path):
     if suffix == ".svg":
         return "image/svg+xml"
     return "application/octet-stream"
-

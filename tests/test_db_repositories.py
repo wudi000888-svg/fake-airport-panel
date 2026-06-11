@@ -24,6 +24,10 @@ def test_db_schema_creates_required_tables(tmp_path, monkeypatch):
             row[0]
             for row in conn.execute("select name from sqlite_master where type='table'")
         }
+        versions = {
+            row[0]
+            for row in conn.execute("select version from schema_migrations")
+        }
 
     assert {
         "schema_migrations",
@@ -37,8 +41,10 @@ def test_db_schema_creates_required_tables(tmp_path, monkeypatch):
         "password_resets",
         "audit_logs",
         "subscription_access",
+        "traffic_samples",
         "settings",
     }.issubset(tables)
+    assert 2 in versions
 
 
 def test_legacy_json_migration_tools_are_removed():
@@ -170,6 +176,91 @@ def test_sqlite_repositories_preserve_users_nodes_registrations_and_settings(tmp
     assert registrations.get("reg_1")["username"] == "alice"
     assert resets.get("rst_1")["status"] == "pending"
     assert settings.get("link_settings")["hy2_name"] == "H2"
+
+
+def test_sqlite_traffic_repository_records_and_aggregates_samples(tmp_path):
+    import db_schema
+    from repositories.sqlite_traffic import SQLiteTrafficRepository
+
+    db_path = tmp_path / "fake-ui.db"
+    db_schema.migrate(db_path)
+
+    traffic = SQLiteTrafficRepository(db_path)
+    traffic.add_sample(
+        {
+            "username": "alice",
+            "source": "xray",
+            "node_id": "vless-main",
+            "uplink_bytes": 100,
+            "downlink_bytes": 400,
+            "sampled_at": "2026-06-09T00:10:00+00:00",
+        }
+    )
+    traffic.add_sample(
+        {
+            "username": "alice",
+            "source": "hy2",
+            "node_id": "hy2-main",
+            "uplink_bytes": 200,
+            "downlink_bytes": 800,
+            "sampled_at": "2026-06-09T00:40:00+00:00",
+        }
+    )
+    traffic.add_sample(
+        {
+            "username": "bob",
+            "source": "xray",
+            "node_id": "vless-main",
+            "uplink_bytes": 50,
+            "downlink_bytes": 150,
+            "sampled_at": "2026-06-09T01:05:00+00:00",
+        }
+    )
+
+    series = traffic.series("2026-06-09T00:00:00+00:00", "2026-06-09T02:00:00+00:00", "hour")
+    assert series == [
+        {"bucket": "2026-06-09T00:00:00+00:00", "uplink_bytes": 300, "downlink_bytes": 1200, "total_bytes": 1500},
+        {"bucket": "2026-06-09T01:00:00+00:00", "uplink_bytes": 50, "downlink_bytes": 150, "total_bytes": 200},
+    ]
+
+    assert traffic.top_users("2026-06-09T00:00:00+00:00", "2026-06-09T02:00:00+00:00", 2) == [
+        {"username": "alice", "uplink_bytes": 300, "downlink_bytes": 1200, "total_bytes": 1500},
+        {"username": "bob", "uplink_bytes": 50, "downlink_bytes": 150, "total_bytes": 200},
+    ]
+    assert traffic.by_node("2026-06-09T00:00:00+00:00", "2026-06-09T02:00:00+00:00") == [
+        {"node_id": "hy2-main", "source": "hy2", "uplink_bytes": 200, "downlink_bytes": 800, "total_bytes": 1000},
+        {"node_id": "vless-main", "source": "xray", "uplink_bytes": 150, "downlink_bytes": 550, "total_bytes": 700},
+    ]
+
+
+def test_sqlite_traffic_repository_deletes_samples_before_cutoff(tmp_path):
+    import db_schema
+    from repositories.sqlite_traffic import SQLiteTrafficRepository
+
+    db_path = tmp_path / "fake-ui.db"
+    db_schema.migrate(db_path)
+
+    traffic = SQLiteTrafficRepository(db_path)
+    for sampled_at in [
+        "2026-06-01T00:00:00+00:00",
+        "2026-06-10T00:00:00+00:00",
+        "2026-06-11T00:00:00+00:00",
+    ]:
+        traffic.add_sample(
+            {
+                "username": "alice",
+                "source": "xray",
+                "node_id": "vless-main",
+                "uplink_bytes": 10,
+                "downlink_bytes": 20,
+                "sampled_at": sampled_at,
+            }
+        )
+
+    assert traffic.delete_before("2026-06-10T00:00:00+00:00") == 1
+    assert traffic.top_users("2026-06-01T00:00:00+00:00", "2026-06-12T00:00:00+00:00", 10) == [
+        {"username": "alice", "uplink_bytes": 20, "downlink_bytes": 40, "total_bytes": 60},
+    ]
 
 
 def test_plans_and_orders_use_sqlite_runtime(tmp_path, monkeypatch):

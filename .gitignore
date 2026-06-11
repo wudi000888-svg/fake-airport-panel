@@ -1,4 +1,5 @@
 data/
+artifacts/
 .demo-runtime/
 .superpowers/
 .worktrees/

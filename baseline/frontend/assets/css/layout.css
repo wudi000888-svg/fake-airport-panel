@@ -30,18 +30,19 @@ body {
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   padding: 16px 14px;
-  color: #ffffff;
-  background: var(--nav);
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.96);
+  border-right: 1px solid var(--line);
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.32) transparent;
+  scrollbar-color: rgba(20, 184, 166, 0.32) transparent;
 }
 
 .brand-block {
   display: grid;
   gap: 3px;
   padding: 8px 10px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid var(--line);
 }
 
 .brand-title {
@@ -57,8 +58,19 @@ body {
 }
 
 .brand-block span {
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--muted);
   font-size: 13px;
+}
+
+.sidebar-logo {
+  width: 36px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #ffffff !important;
+  background: linear-gradient(135deg, #2563eb, #14b8a6);
+  font-weight: 900;
 }
 
 .nav-stack {
@@ -75,13 +87,13 @@ body {
   gap: 10px;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  scrollbar-color: rgba(20, 184, 166, 0.3) transparent;
 }
 
 .nav-stack-secondary {
   margin-top: 0;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1px solid var(--line);
 }
 
 .side-nav-footer {
@@ -89,7 +101,7 @@ body {
   display: grid;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.14);
+  border-top: 1px solid var(--line);
 }
 
 .side-nav-meta {
@@ -99,7 +111,7 @@ body {
   justify-content: space-between;
   gap: 10px;
   padding: 7px 10px;
-  color: rgba(255, 255, 255, 0.68);
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -125,7 +137,7 @@ body {
   gap: 16px;
   min-height: 64px;
   padding: 10px 24px;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.94);
   border-bottom: 1px solid var(--line);
 }
 
@@ -141,6 +153,13 @@ body {
 
 .topbar .version-chip {
   vertical-align: middle;
+}
+
+.topbar-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .version-chip {
@@ -159,9 +178,9 @@ body {
 }
 
 .side-nav .version-chip {
-  color: #dbeafe;
-  border-color: rgba(219, 234, 254, 0.28);
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--primary);
+  border-color: rgba(37, 99, 235, 0.18);
+  background: var(--primary-soft);
 }
 
 .identity-chip {
@@ -172,16 +191,32 @@ body {
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  color: var(--muted);
+  gap: 8px;
+  color: var(--ink);
   background: var(--surface);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.identity-chip b {
+  width: 30px;
+  height: 30px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--accent);
+  font-size: 13px;
+}
+
+.identity-chip span {
+  color: var(--muted);
+}
+
 .main-v2 {
-  width: min(1180px, calc(100vw - 240px - 44px));
-  max-width: 1180px;
+  width: min(1480px, calc(100vw - 240px - 44px));
+  max-width: 1480px;
   margin: 0 auto;
   padding: 22px;
 }

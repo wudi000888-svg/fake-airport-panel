@@ -2,7 +2,8 @@ param(
   [string]$HostAlias = "fake-ui-sg",
   [string]$RemoteDir = "/opt/fake-airport",
   [switch]$SkipTests,
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [switch]$AllowDirtyHead
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +34,16 @@ function Invoke-Checked {
   & $Command
   if ($LASTEXITCODE -ne 0) {
     throw "$Label failed with exit code $LASTEXITCODE"
+  }
+}
+
+if (-not $AllowDirtyHead) {
+  $Dirty = @(git status --porcelain)
+  if ($LASTEXITCODE -ne 0) {
+    throw "git status failed with exit code $LASTEXITCODE"
+  }
+  if ($Dirty.Count -gt 0) {
+    throw "Refusing to deploy with uncommitted changes. Commit or stash changes first, or pass -AllowDirtyHead to deploy the committed HEAD while local changes remain."
   }
 }
 
@@ -112,7 +123,7 @@ from pathlib import Path
 
 path = Path(".env")
 wanted = {
-    "FAKE_UI_VERSION": "2.1.2",
+    "FAKE_UI_VERSION": "2.2.0",
     "FAKE_UI_DB": "/data/panel/fake-ui.db",
 }
 lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []

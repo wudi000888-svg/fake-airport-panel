@@ -43,6 +43,24 @@ export function empty(message, action = "", label = "") {
 }
 
 
+export function renderAppError(message) {
+  return `
+    <section class="screen app-error-screen">
+      <article class="admin-card">
+        <div>
+          <strong>数据加载失败</strong>
+          <span>${esc(message || "面板数据暂时不可用")}</span>
+        </div>
+        <div class="toolbar-actions">
+          <button class="primary" data-action="retry-boot" type="button">重试</button>
+          <button class="secondary" data-action="logout" type="button">退出</button>
+        </div>
+      </article>
+    </section>
+  `;
+}
+
+
 export function money(value) {
   const number = Number(value || 0);
   return Number.isFinite(number) ? `$${number.toFixed(number % 1 ? 2 : 0)}` : `$${esc(value)}`;

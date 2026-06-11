@@ -11,6 +11,7 @@ export const state = {
   data: {},
   filters: {},
   busy: false,
+  bootError: null,
   notice: null,
 };
 
@@ -20,6 +21,10 @@ export function setRouteFromLocation() {
 
 export function setNotice(message, type = "info") {
   state.notice = message ? { message, type } : null;
+}
+
+export function setBootError(message) {
+  state.bootError = message || null;
 }
 
 export function clearNotice() {

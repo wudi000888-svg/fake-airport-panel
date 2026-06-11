@@ -34,11 +34,6 @@ def handle_public_post(clean, data):
             result=result,
         )
 
-    if clean == "/api/password-reset/request":
-        item = registration_store.create_password_reset(data.get("username", ""))
-        audit_log.write(data.get("username", ""), "password_reset.request", data.get("username", ""), {"token": item.get("token", "")[:10]})
-        return ok(reset=item)
-
     if clean == "/api/password-reset/send-code":
         try:
             return ok(**password_reset_service.send_code(data.get("username") or data.get("email") or data.get("identifier", "")))

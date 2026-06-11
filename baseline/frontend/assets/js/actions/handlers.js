@@ -9,7 +9,7 @@ import { handlePaymentAction, handlePaymentForm } from "./payments.js";
 import { handleUserNodeAction, handleUserNodeForm } from "./users_nodes.js";
 
 
-export function bindAppActions(app, { refresh, render }) {
+export function bindAppActions(app, { refresh, render, loadAuthenticatedApp }) {
   async function runAction(work, success = "操作已完成") {
     try {
       state.busy = true;
@@ -35,9 +35,7 @@ export function bindAppActions(app, { refresh, render }) {
       if (form.dataset.form === "login") {
         const result = await post("/api/login", data);
         state.session = result.session;
-        state.shell = await api("/api/app-shell");
-        state.publicSettings = state.shell.public_settings || state.publicSettings;
-        await refresh();
+        await loadAuthenticatedApp();
         navigate("dashboard");
         setNotice("登录成功", "success");
         await render();
@@ -89,6 +87,10 @@ export function bindAppActions(app, { refresh, render }) {
       if (button.dataset.action === "refresh") {
         await refresh();
         setNotice("已刷新", "success");
+      }
+      if (button.dataset.action === "retry-boot") {
+        await loadAuthenticatedApp();
+        setNotice("已恢复连接", "success");
       }
       if (button.dataset.action === "open-plans") {
         navigate("plans");

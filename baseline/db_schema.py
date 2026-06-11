@@ -1,7 +1,7 @@
 import db
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 DDL = [
@@ -125,6 +125,18 @@ DDL = [
     )
     """,
     """
+    create table if not exists traffic_samples (
+        id integer primary key autoincrement,
+        username text not null default '',
+        source text not null default '',
+        node_id text not null default '',
+        uplink_bytes integer not null default 0,
+        downlink_bytes integer not null default 0,
+        total_bytes integer not null default 0,
+        sampled_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    )
+    """,
+    """
     create table if not exists settings (
         key text primary key,
         value_json text not null,
@@ -134,6 +146,8 @@ DDL = [
     "create index if not exists idx_orders_user_status on orders(username, status, created_at)",
     "create index if not exists idx_payments_order_status on payments(order_id, status, created_at)",
     "create index if not exists idx_nodes_kind_enabled on nodes(kind, enabled, sort_order)",
+    "create index if not exists idx_traffic_samples_time_user on traffic_samples(sampled_at, username)",
+    "create index if not exists idx_traffic_samples_node on traffic_samples(node_id, source, sampled_at)",
 ]
 
 

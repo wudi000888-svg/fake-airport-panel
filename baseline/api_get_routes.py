@@ -21,7 +21,7 @@ def handle_get(path, session):
     clean = parsed.path
     query = urllib.parse.parse_qs(parsed.query)
 
-    v2_result = api_v2_routes.handle_get(clean, session)
+    v2_result = api_v2_routes.handle_get(path, session)
     if v2_result is not None:
         return v2_result
 

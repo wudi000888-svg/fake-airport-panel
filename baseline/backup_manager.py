@@ -140,23 +140,47 @@ def _check_sqlite_integrity(path):
         raise RuntimeError("backup database integrity check failed")
 
 
+def _stage_restore_files(files):
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stage = BACKUP_DIR / f".restore-stage-{now_stamp()}"
+    stage.mkdir(parents=True, exist_ok=False)
+    try:
+        restored = []
+        for name, content in files.items():
+            if name == REQUIRED_META:
+                continue
+            if name not in BACKUP_FILES:
+                continue
+            target = stage / name
+            target.write_bytes(content)
+            _chmod_restored_file(target, name)
+            restored.append(name)
+        _check_sqlite_integrity(stage / "fake-ui.db")
+        return stage, restored
+    except Exception:
+        shutil.rmtree(stage, ignore_errors=True)
+        raise
+
+
+def _commit_staged_restore(stage, restored):
+    try:
+        for name in restored:
+            source = stage / name
+            target = PANEL_DIR / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source.replace(target)
+            _chmod_restored_file(target, name)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+
+
 def restore_backup_archive(raw, operator="admin"):
     if not raw:
         raise RuntimeError("backup archive is empty")
     create_backup(reason=f"pre-restore by {operator}", keep=30)
     archive_root, files = _extract_backup_files(raw)
-    restored = []
-    for name, content in files.items():
-        if name == REQUIRED_META:
-            continue
-        if name not in BACKUP_FILES:
-            continue
-        target = PANEL_DIR / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(content)
-        _chmod_restored_file(target, name)
-        restored.append(name)
-    _check_sqlite_integrity(PANEL_DIR / "fake-ui.db")
+    stage, restored = _stage_restore_files(files)
+    _commit_staged_restore(stage, restored)
     marker = BACKUP_DIR / f"imported-{now_stamp()}.tgz"
     marker.write_bytes(raw)
     archive_name = f"{archive_root}.tgz" if archive_root else marker.name

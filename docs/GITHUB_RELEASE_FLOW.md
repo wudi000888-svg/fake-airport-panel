@@ -12,6 +12,7 @@ This document describes the public-safe flow for publishing fake-ui updates to G
 | Existing tags | `git tag --list "v*"` |
 
 Do not continue if unrelated local changes exist.
+The Windows Compose deploy script archives `HEAD`, so the default path refuses to deploy when `git status --porcelain` is not empty. Commit or stash first; use `-AllowDirtyHead` only when you deliberately want to deploy the committed `HEAD` while local changes remain.
 
 ## 2. Local Test
 
@@ -64,7 +65,7 @@ src="$verify"
 dst="/opt/fake-airport"
 
 cd "$src"
-tar --exclude='.git' --exclude='.env' --exclude='data' --exclude='generated' -cf /tmp/fake-ui-code.tar .
+python3 scripts/package-code.py /tmp/fake-ui-code.tar
 
 cd "$dst"
 tar -xf /tmp/fake-ui-code.tar
@@ -72,6 +73,7 @@ rm -f /tmp/fake-ui-code.tar
 ```
 
 This preserves `.env`, `data/`, generated certs, users, tokens, node settings, and runtime secrets.
+When packaging from macOS, prefer `scripts/package-code.py` over direct `tar` so Finder metadata and extended attributes are not written into the archive.
 
 ## 6. Rebuild and Restart
 

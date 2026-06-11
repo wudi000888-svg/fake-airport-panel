@@ -16,7 +16,7 @@ function navButton(item) {
   const active = state.route === item.id ? " active" : "";
   return `
     <button class="nav-item${active}" data-nav="${esc(item.id)}" type="button">
-      <span class="nav-dot" aria-hidden="true"></span>
+      <span class="nav-dot" aria-hidden="true">${esc(item.icon || "")}</span>
       <span>${esc(item.label)}</span>
     </button>
   `;
@@ -37,12 +37,13 @@ export function layout(content) {
   const secondary = secondaryItems.map(navButton).join("");
   const username = state.shell?.username || state.session?.username || "";
   const role = state.shell?.role === "admin" ? "管理员" : "用户";
-  const version = state.shell?.version || "2.1.2";
+  const version = state.shell?.version || "2.2.0";
   return `
     <div class="app-shell-v2">
       <aside class="side-nav" aria-label="主导航">
         <div class="brand-block">
           <div class="brand-title">
+            <span class="sidebar-logo">F</span>
             <strong>fake-ui</strong>
             <span class="version-chip">v${esc(version)}</span>
           </div>
@@ -63,10 +64,13 @@ export function layout(content) {
       <div class="workspace-v2">
         <header class="topbar">
           <div>
-            <strong>fake-ui <span class="version-chip">v${esc(version)}</span></strong>
-            <span>单机多出口代理编排系统</span>
+            <strong>${state.shell?.role === "admin" ? "管理控制台" : "用户中心"}</strong>
+            <span>系统概览与统计数据</span>
           </div>
-          <div class="identity-chip">${esc(username || role)}</div>
+          <div class="topbar-actions">
+            <span class="version-chip">v${esc(version)}</span>
+            <div class="identity-chip"><b>${esc((username || role).slice(0, 2).toUpperCase())}</b><span>${esc(username || role)}</span></div>
+          </div>
           <button class="secondary" data-action="logout" type="button">退出</button>
         </header>
         <main class="main-v2">${notice()}${content}</main>

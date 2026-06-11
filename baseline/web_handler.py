@@ -14,6 +14,13 @@ import http_subscription_routes
 import security
 
 
+def cache_control_for_path(path):
+    clean = urllib.parse.urlparse(path).path
+    if clean.startswith("/assets/") or clean in {"/favicon.ico", "/favicon.svg"}:
+        return "public, max-age=3600"
+    return "no-store"
+
+
 class PanelRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return
@@ -75,7 +82,7 @@ class PanelRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", api.content_type(path))
         self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache_control_for_path(self.path))
         self.send_security_headers(api.content_type(path))
         self.end_headers()
         self.wfile.write(raw)

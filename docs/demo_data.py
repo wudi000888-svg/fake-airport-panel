@@ -30,6 +30,7 @@ import payments_store
 import plans_store
 import registration_store
 import store_facade
+import traffic_store
 import user_store
 from json_store import save_json
 from panel_config import (
@@ -218,6 +219,40 @@ def main():
 
     write_text(AUDIT_LOG_FILE, "[demo] admin node.refresh vless-main\n[demo] admin user.create alice\n")
     write_text(SUB_ACCESS_LOG_FILE, '{"ts":"demo","username":"alice","ip":"198.51.100.8","status":"ok","path":"/sub/demo/raw","ua":"Mihomo"}\n')
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    for hour in range(24):
+        sampled_at = (now - timedelta(hours=23 - hour)).isoformat()
+        traffic_store.add_sample(
+            {
+                "username": "alice",
+                "source": "xray",
+                "node_id": "vless-main",
+                "uplink_bytes": gb(0.08 + hour * 0.004),
+                "downlink_bytes": gb(0.55 + (hour % 6) * 0.12),
+                "sampled_at": sampled_at,
+            }
+        )
+        traffic_store.add_sample(
+            {
+                "username": "bob",
+                "source": "hy2",
+                "node_id": "hy2-main",
+                "uplink_bytes": gb(0.04 + (hour % 4) * 0.01),
+                "downlink_bytes": gb(0.22 + (hour % 5) * 0.08),
+                "sampled_at": sampled_at,
+            }
+        )
+        if hour % 3 == 0:
+            traffic_store.add_sample(
+                {
+                    "username": "carol",
+                    "source": "xray",
+                    "node_id": "vless-proxy-1",
+                    "uplink_bytes": gb(0.18),
+                    "downlink_bytes": gb(1.2 + hour * 0.02),
+                    "sampled_at": sampled_at,
+                }
+            )
     write_text(
         XRAY_CONFIG,
         json.dumps(

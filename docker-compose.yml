@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        XRAY_IMAGE: ${XRAY_IMAGE:-ghcr.io/xtls/xray-core:latest}
+        XRAY_IMAGE: ${XRAY_IMAGE:-ghcr.io/xtls/xray-core:26.3.27}
     image: ${PANEL_IMAGE:-xray-proxy-panel:local}
     container_name: xray-proxy-panel
     restart: unless-stopped
@@ -44,7 +44,7 @@ services:
       HY2_LOGS_CMD: docker logs --tail=80 hysteria2
       QUOTA_COLLECT_CMD: python3 /app/quota_collect.py
       ENFORCE_USERS_CMD: python3 /app/enforce_users.py
-      FAKE_UI_VERSION: ${FAKE_UI_VERSION:-2.1.2}
+      FAKE_UI_VERSION: ${FAKE_UI_VERSION:-2.2.0}
       FAKE_UI_DB: ${FAKE_UI_DB:-/data/panel/fake-ui.db}
     volumes:
       - ./data:/data
@@ -55,7 +55,7 @@ services:
       context: .
       dockerfile: docker/xray/Dockerfile
       args:
-        XRAY_IMAGE: ${XRAY_IMAGE:-ghcr.io/xtls/xray-core:latest}
+        XRAY_IMAGE: ${XRAY_IMAGE:-ghcr.io/xtls/xray-core:26.3.27}
     container_name: xray
     restart: unless-stopped
     network_mode: host
@@ -68,7 +68,7 @@ services:
     command: ["run", "-config", "/etc/xray/config.json"]
 
   hysteria2:
-    image: ${HYSTERIA_IMAGE:-tobyxdd/hysteria:latest}
+    image: ${HYSTERIA_IMAGE:-tobyxdd/hysteria:v2.9.2}
     container_name: hysteria2
     restart: unless-stopped
     network_mode: host
@@ -104,7 +104,7 @@ services:
       && nginx -g 'daemon off;'"
 
   certbot:
-    image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
+    image: ${CERTBOT_IMAGE:-certbot/certbot:v5.2.2}
     profiles: ["certbot"]
     volumes:
       - ./data/letsencrypt:/etc/letsencrypt
@@ -124,7 +124,7 @@ services:
       - --no-eff-email
 
   certbot-renew:
-    image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
+    image: ${CERTBOT_IMAGE:-certbot/certbot:v5.2.2}
     profiles: ["certbot"]
     volumes:
       - ./data/letsencrypt:/etc/letsencrypt

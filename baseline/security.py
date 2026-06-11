@@ -1,5 +1,6 @@
 import secrets
 import time
+from ipaddress import ip_address, ip_network
 
 from http_utils import api_error
 from panel_config import SESSION_TTL
@@ -9,6 +10,17 @@ _LOGIN_ATTEMPTS = {}
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_ATTEMPTS = 8
 CSRF_HEADER = "X-CSRF-Token"
+TRUSTED_PROXY_NETWORKS = tuple(
+    ip_network(network)
+    for network in (
+        "127.0.0.0/8",
+        "::1/128",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "fc00::/7",
+    )
+)
 
 
 def security_headers(content_type=""):
@@ -57,14 +69,36 @@ def csrf_token_for_session(session):
     return token
 
 
+def _is_trusted_proxy_ip(ip):
+    try:
+        parsed = ip_address(str(ip or "").strip())
+    except ValueError:
+        return False
+    return any(parsed in network for network in TRUSTED_PROXY_NETWORKS)
+
+
+def _forwarded_ip_chain(forwarded_for=""):
+    return [part.strip() for part in str(forwarded_for or "").split(",") if part.strip()]
+
+
+def client_ip_from_request(remote_ip="", forwarded_for=""):
+    remote = str(remote_ip or "").strip()
+    forwarded = _forwarded_ip_chain(forwarded_for)
+    if forwarded and _is_trusted_proxy_ip(remote):
+        for ip in reversed(forwarded):
+            if not _is_trusted_proxy_ip(ip):
+                return ip
+        return forwarded[-1]
+    return remote
+
+
 def login_key(handler, username):
     forwarded = handler.headers.get("X-Forwarded-For", "")
-    ip = forwarded.split(",", 1)[0].strip() or getattr(handler, "client_address", [""])[0]
     return login_key_from_request(username, remote_ip=getattr(handler, "client_address", [""])[0], forwarded_for=forwarded)
 
 
 def login_key_from_request(username, remote_ip="", forwarded_for=""):
-    ip = str(forwarded_for or "").split(",", 1)[0].strip() or str(remote_ip or "").strip()
+    ip = client_ip_from_request(remote_ip, forwarded_for)
     return f"{ip}:{str(username or '').lower()}"
 
 

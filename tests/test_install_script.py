@@ -19,19 +19,40 @@ def test_install_script_checks_v2_module_entry_and_sets_version():
     compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
     routes = (ROOT / "baseline" / "api_v2_routes.py").read_text(encoding="utf-8")
 
-    assert "FAKE_UI_VERSION=2.1.2" in script
-    assert "FAKE_UI_VERSION: ${FAKE_UI_VERSION:-2.1.2}" in compose
+    assert "FAKE_UI_VERSION=2.2.0" in script
+    assert "FAKE_UI_VERSION: ${FAKE_UI_VERSION:-2.2.0}" in compose
     assert "FAKE_UI_STORE" not in script
     assert "FAKE_UI_STORE" not in compose
     assert "migrate-json-to-sqlite.py" not in script
     assert "migrate-json-to-sqlite.py" not in deploy
     assert "export-sqlite-to-json.py" not in script
     assert "export-sqlite-to-json.py" not in deploy
-    assert '"FAKE_UI_VERSION": "2.1.2"' in deploy
+    assert '"FAKE_UI_VERSION": "2.2.0"' in deploy
     assert "/assets/js/main.js" in script
     assert "/assets/app.js" not in script
     assert "/assets/app.js" not in deploy
     assert "APP_VERSION" in routes
+
+
+def test_default_runtime_images_are_pinned_not_latest():
+    script = (ROOT / "scripts" / "install-fresh-vps.sh").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "ghcr.io/xtls/xray-core:26.3.27" in script
+    assert "tobyxdd/hysteria:v2.9.2" in script
+    assert "certbot/certbot:v5.2.2" in script
+    assert "nginx:1.27-alpine" in script
+    assert ":latest" not in script
+    assert ":latest" not in compose
+
+
+def test_windows_deploy_refuses_dirty_worktree_by_default():
+    deploy = (ROOT / "scripts" / "deploy-compose-windows.ps1").read_text(encoding="utf-8")
+
+    assert "[switch]$AllowDirtyHead" in deploy
+    assert "git status --porcelain" in deploy
+    assert "Refusing to deploy with uncommitted changes" in deploy
+    assert "git archive --format=tar -o $Archive HEAD" in deploy
 
 
 def test_native_nginx_install_includes_security_headers():

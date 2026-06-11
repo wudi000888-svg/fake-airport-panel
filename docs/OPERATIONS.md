@@ -36,7 +36,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\deploy-compose-win
 | --- | --- |
 | `-SkipTests` | 跳过本地测试，仅建议已刚跑过测试时使用 |
 | `-SkipBuild` | 只同步代码和远端测试，不重建 panel 容器 |
+| `-AllowDirtyHead` | 允许在本地存在未提交改动时部署已提交的 `HEAD`，默认不建议使用 |
 | Bash 一键测试 | `bash scripts/test-local.sh` |
+
+如果需要把当前本地工作树的未提交代码部署到测试机，先用：
+
+```bash
+python3 scripts/package-code.py /tmp/fake-ui-code.tar
+```
+
+这个脚本会按 Git 文件列表打包，跳过 `.env`、`data/`、`generated/` 和 `.git`，并避免 macOS 扩展属性进入归档。
 
 ## Docker Compose 部署流程
 
@@ -68,6 +77,8 @@ docker compose up -d --build
 docker compose ps
 docker compose logs --tail=100 panel
 ```
+
+默认运行镜像使用固定标签，避免重装时被 `latest` 静默替换。需要主动升级底层镜像时，在 `.env` 中显式修改 `XRAY_IMAGE`、`HYSTERIA_IMAGE`、`NGINX_IMAGE` 或 `CERTBOT_IMAGE`，并先在测试机完成回归。
 
 ## 生产上线检查
 

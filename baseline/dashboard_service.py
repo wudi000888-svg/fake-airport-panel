@@ -1,7 +1,8 @@
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import admin_profile
+import admin_metrics_service
 import app_urls
 import audit_log
 import backup_manager
@@ -15,6 +16,7 @@ import plans_store
 import public_settings
 import registration_store
 import subscription_guard
+import traffic_store
 import user_store
 import xray_panel
 
@@ -69,10 +71,17 @@ def effective_node_ids_for_user(user):
     return [node.get("id", "") for node in node_catalog.nodes_for_user(user or {}, include_disabled=False) if node.get("id")]
 
 
-def user_summary(username, user):
+def recent_traffic_by_user():
+    now = datetime.now(timezone.utc)
+    rows = traffic_store.top_users((now - timedelta(days=1)).isoformat(), now.isoformat(), 500)
+    return {item.get("username"): item.get("total_bytes", 0) for item in rows}
+
+
+def user_summary(username, user, today_by_user=None):
     sub_token = user.get("sub_token", "")
     base_sub = app_urls.subscription_url(sub_token) if sub_token else ""
     metrics = user_metrics(username, user)
+    today_by_user = today_by_user or {}
     return {
         "username": username,
         "enabled": bool(user.get("enabled", True)),
@@ -83,6 +92,7 @@ def user_summary(username, user):
         "quota_status": user_store.quota_status_text(user),
         "metrics": metrics,
         "used_bytes": int(user.get("used_bytes", 0) or 0),
+        "today_bytes": int(today_by_user.get(username, 0) or 0),
         "quota_bytes": int(user.get("quota_bytes", 0) or 0),
         "plan_id": user.get("plan_id", ""),
         "plan_name": metrics.get("plan_name", ""),
@@ -100,7 +110,8 @@ def user_summary(username, user):
 
 def list_users():
     data = user_store.load_users()
-    return [user_summary(username, user) for username, user in sorted(data.get("users", {}).items())]
+    today_by_user = recent_traffic_by_user()
+    return [user_summary(username, user, today_by_user) for username, user in sorted(data.get("users", {}).items())]
 
 
 def user_links(username):
@@ -176,6 +187,7 @@ def dashboard(session):
     if role == "admin":
         xray_status = xray_panel.current_status()
         xray_status["enabled"] = ":" in str(xray_status.get("proxy", ""))
+        metrics_query = {"range": ["24h"], "granularity": ["hour"], "limit": ["12"]}
         payload.update(
             {
                 "xray": xray_status,
@@ -195,6 +207,10 @@ def dashboard(session):
                 "registrations": registration_store.list_registrations(),
                 "password_resets": registration_store.list_resets(),
                 "subscription_access": subscription_guard.tail(120),
+                "metrics": admin_metrics_service.overview(),
+                "traffic": admin_metrics_service.traffic_series(metrics_query),
+                "top_users": admin_metrics_service.top_users(metrics_query).get("users", []),
+                "node_traffic": admin_metrics_service.nodes(metrics_query).get("nodes", []),
             }
         )
     else:

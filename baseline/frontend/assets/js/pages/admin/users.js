@@ -1,4 +1,5 @@
 import { esc } from "../../components/layout.js";
+import { gb } from "../../components/ui.js";
 
 
 function matchesUser(user, query) {
@@ -52,6 +53,9 @@ function nodePicker(nodes, user = {}) {
 
 
 function userCard(user, nodes) {
+  const metrics = user.metrics || {};
+  const usedPercent = Number(metrics.used_percent || user.used_percent || 0);
+  const clamped = Math.max(0, Math.min(100, usedPercent));
   return `
     <article class="admin-card">
       <div>
@@ -59,6 +63,14 @@ function userCard(user, nodes) {
         <span>${esc(user.status || "")} · ${esc(user.quota_status || "")}</span>
       </div>
       <p>${esc(user.plan_name || user.plan_id || "自定义套餐")} · ${esc(user.metrics?.days_left ?? "-")} 天</p>
+      <div class="traffic-progress" aria-label="用户流量使用情况">
+        <div>
+          <span>已用 ${gb(metrics.used_bytes || user.used_bytes || 0)}</span>
+          <span>${clamped.toFixed(clamped >= 10 ? 0 : 1)}%</span>
+        </div>
+        <i style="--traffic-width:${clamped}%"></i>
+      </div>
+      <p>今日流量：${gb(user.today_bytes || 0)} · 剩余 ${gb(metrics.remain_bytes || 0)}</p>
       <p>节点：${esc(userNodeText(user, nodes))}</p>
       <div class="admin-actions">
         <button class="secondary" data-action="user-edit" data-user="${esc(user.username)}" type="button">编辑</button>

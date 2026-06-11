@@ -2,7 +2,9 @@
 import json
 import pathlib
 import sys
+import tarfile
 from datetime import timedelta
+from io import BytesIO
 
 import pytest
 
@@ -274,11 +276,18 @@ def test_password_reset_email_code_flow(app_modules, monkeypatch):
 
 def test_password_reset_disabled_blocks_request(app_modules):
     api = app_modules["api"]
+    registration_store = app_modules["registration_store"]
 
     status, payload = api.handle_post("/api/password-reset/send-code", {"username": "resetme"}, None)
 
     assert status == 403
     assert payload["ok"] is False
+
+    status, payload = api.handle_post("/api/password-reset/request", {"username": "resetme"}, None)
+
+    assert status == 401
+    assert payload["ok"] is False
+    assert registration_store.list_resets() == []
 
 
 def test_user_create_and_node_assignment(app_modules):
@@ -738,6 +747,7 @@ def test_http_api_get_converts_exceptions_to_json_errors(app_modules, monkeypatc
 def test_session_cookie_and_security_headers(app_modules):
     import auth_store
     import security
+    import web_handler
     from web_handler import PanelRequestHandler
 
     token = auth_store.make_session("admin", "admin")
@@ -748,6 +758,9 @@ def test_session_cookie_and_security_headers(app_modules):
     assert headers["X-Frame-Options"] == "DENY"
     assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
     assert hasattr(PanelRequestHandler, "send_security_headers")
+    assert web_handler.cache_control_for_path("/assets/js/main.js") == "public, max-age=3600"
+    assert web_handler.cache_control_for_path("/favicon.ico") == "public, max-age=3600"
+    assert web_handler.cache_control_for_path("/login") == "no-store"
 
 
 def test_legacy_session_without_csrf_is_rejected(app_modules):
@@ -770,6 +783,18 @@ def test_login_rate_limit_tracks_failures(app_modules):
     assert security.login_limited(key, now=1000) is True
     security.clear_login_failures(key)
     assert security.login_limited(key, now=1000) is False
+
+
+def test_forwarded_client_ip_only_trusted_from_proxy(app_modules):
+    import security
+    import subscription_guard
+
+    assert security.client_ip_from_request("127.0.0.1", "198.51.100.7, 127.0.0.1") == "198.51.100.7"
+    assert security.client_ip_from_request("127.0.0.1", "198.51.100.99, 198.51.100.7") == "198.51.100.7"
+    assert security.client_ip_from_request("8.8.8.8", "198.51.100.7, 127.0.0.1") == "8.8.8.8"
+    assert security.login_key_from_request("Admin", remote_ip="8.8.8.8", forwarded_for="198.51.100.7") == "8.8.8.8:admin"
+    assert subscription_guard.client_ip({"X-Forwarded-For": "198.51.100.7"}, "8.8.8.8") == "8.8.8.8"
+    assert subscription_guard.client_ip({"X-Forwarded-For": "198.51.100.7"}, "127.0.0.1") == "198.51.100.7"
 
 
 def test_api_login_uses_rate_limit_and_audit(app_modules, monkeypatch):
@@ -1221,3 +1246,31 @@ def test_restore_backup_sets_database_permissions_and_checks_integrity(app_modul
 
     db_path = backup_manager.PANEL_DIR / "fake-ui.db"
     assert oct(os.stat(db_path).st_mode & 0o777) == "0o600"
+
+
+def test_restore_backup_rejects_bad_database_without_overwriting_current(app_modules):
+    import backup_manager
+    import store_facade
+    import user_store
+
+    store_facade.ensure_sqlite()
+    users = user_store.load_users()
+    users["users"]["survivor"] = {"enabled": True, "sub_token": "sub_survivor", "panel_password": {}}
+    user_store.save_users(users)
+    backup_manager.create_backup("pre-bad-restore")
+
+    raw = BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz") as tar:
+        meta = b'{"reason":"bad-db","files":["fake-ui.db"]}'
+        info = tarfile.TarInfo("panel-backup-bad/backup.json")
+        info.size = len(meta)
+        tar.addfile(info, BytesIO(meta))
+        bad_db = b"not sqlite"
+        info = tarfile.TarInfo("panel-backup-bad/fake-ui.db")
+        info.size = len(bad_db)
+        tar.addfile(info, BytesIO(bad_db))
+
+    with pytest.raises(RuntimeError, match="backup database integrity check failed"):
+        backup_manager.restore_backup_archive(raw.getvalue(), operator="admin")
+
+    assert user_store.get_user("survivor")["sub_token"] == "sub_survivor"

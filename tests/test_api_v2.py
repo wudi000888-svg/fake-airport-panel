@@ -39,6 +39,7 @@ MODULES = [
     "api_get_routes",
     "api_post_routes",
     "api",
+    "traffic_store",
 ]
 
 
@@ -128,3 +129,106 @@ def test_admin_dashboard_survives_subscription_link_generation_failure(v2_module
     assert "data" in payload
     assert payload["data"]["links"]["error"] == "xray"
     assert "users" in payload["data"]
+
+
+def test_admin_metrics_api_returns_operational_dashboard_data(v2_modules):
+    api = v2_modules["api"]
+    plans_store = v2_modules["plans_store"]
+    user_store = v2_modules["user_store"]
+    traffic_store = v2_modules["traffic_store"]
+
+    plans_store.upsert_plan({"id": "starter", "name": "Starter", "days": 30, "traffic_gb": 50, "price": "9", "enabled": True})
+    users = user_store.load_users()
+    users["users"]["alice"].update({"plan_id": "starter", "quota_bytes": 1000, "used_bytes": 200})
+    users["users"]["bob"] = {"enabled": True, "sub_token": "tok_bob", "plan_id": "", "quota_bytes": 0, "used_bytes": 0}
+    user_store.save_users(users)
+
+    traffic_store.add_sample(
+        {
+            "username": "alice",
+            "source": "xray",
+            "node_id": "vless-main",
+            "uplink_bytes": 100,
+            "downlink_bytes": 900,
+            "sampled_at": "2026-06-09T00:10:00+00:00",
+        }
+    )
+    traffic_store.add_sample(
+        {
+            "username": "bob",
+            "source": "hy2",
+            "node_id": "hy2-main",
+            "uplink_bytes": 50,
+            "downlink_bytes": 150,
+            "sampled_at": "2026-06-09T01:20:00+00:00",
+        }
+    )
+
+    session = {"u": "admin", "r": "admin", "role": "admin"}
+    status, payload = api.handle_get("/api/admin/metrics/overview", session)
+    assert status == 200
+    assert payload["metrics"]["users_total"] == 2
+    assert payload["metrics"]["users_enabled"] == 2
+    assert payload["metrics"]["traffic_total_bytes"] == 1200
+    assert payload["metrics"]["plans"]["Starter"] == 1
+    assert payload["metrics"]["plans"]["无套餐"] == 1
+
+    window = "from=2026-06-09T00:00:00%2B00:00&to=2026-06-09T02:00:00%2B00:00"
+    status, payload = api.handle_get(f"/api/admin/metrics/traffic?{window}&granularity=hour", session)
+    assert status == 200
+    assert payload["traffic"]["series"] == [
+        {"bucket": "2026-06-09T00:00:00+00:00", "uplink_bytes": 100, "downlink_bytes": 900, "total_bytes": 1000},
+        {"bucket": "2026-06-09T01:00:00+00:00", "uplink_bytes": 50, "downlink_bytes": 150, "total_bytes": 200},
+    ]
+
+    status, payload = api.handle_get(
+        "/api/admin/metrics/traffic?from=2026-06-09T00:00:00%2B00:00&to=2026-06-09T03:00:00%2B00:00&granularity=hour",
+        session,
+    )
+    assert status == 200
+    assert payload["traffic"]["series"] == [
+        {"bucket": "2026-06-09T00:00:00+00:00", "uplink_bytes": 100, "downlink_bytes": 900, "total_bytes": 1000},
+        {"bucket": "2026-06-09T01:00:00+00:00", "uplink_bytes": 50, "downlink_bytes": 150, "total_bytes": 200},
+        {"bucket": "2026-06-09T02:00:00+00:00", "uplink_bytes": 0, "downlink_bytes": 0, "total_bytes": 0},
+    ]
+
+    status, payload = api.handle_get(
+        "/api/admin/metrics/traffic?from=2026-06-09T00:30:00%2B00:00&to=2026-06-09T01:30:00%2B00:00&granularity=hour",
+        session,
+    )
+    assert status == 200
+    assert payload["traffic"]["series"] == [
+        {"bucket": "2026-06-09T00:00:00+00:00", "uplink_bytes": 0, "downlink_bytes": 0, "total_bytes": 0},
+        {"bucket": "2026-06-09T01:00:00+00:00", "uplink_bytes": 50, "downlink_bytes": 150, "total_bytes": 200},
+    ]
+
+    status, payload = api.handle_get(
+        "/api/admin/metrics/traffic?from=2026-06-09T01:00:00%2B00:00&to=2026-06-11T01:00:00%2B00:00&granularity=day",
+        session,
+    )
+    assert status == 200
+    assert payload["traffic"]["series"] == [
+        {"bucket": "2026-06-09T00:00:00+00:00", "uplink_bytes": 50, "downlink_bytes": 150, "total_bytes": 200},
+        {"bucket": "2026-06-10T00:00:00+00:00", "uplink_bytes": 0, "downlink_bytes": 0, "total_bytes": 0},
+        {"bucket": "2026-06-11T00:00:00+00:00", "uplink_bytes": 0, "downlink_bytes": 0, "total_bytes": 0},
+    ]
+
+    status, payload = api.handle_get(f"/api/admin/metrics/users/top?{window}&limit=1", session)
+    assert status == 200
+    assert payload["users"][0]["username"] == "alice"
+    assert payload["users"][0]["total_bytes"] == 1000
+
+    status, payload = api.handle_get(f"/api/admin/metrics/nodes?{window}", session)
+    assert status == 200
+    assert {item["node_id"] for item in payload["nodes"]} == {"vless-main", "hy2-main"}
+
+    status, payload = api.handle_get("/api/admin/metrics/plans", session)
+    assert status == 200
+    assert payload["plans"][0]["name"] in {"Starter", "无套餐"}
+
+
+def test_admin_metrics_api_is_admin_only(v2_modules):
+    api = v2_modules["api"]
+
+    status, _ = api.handle_get("/api/admin/metrics/overview", {"u": "alice", "r": "user", "role": "user"})
+    assert status == 403

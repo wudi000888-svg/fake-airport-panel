@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
-XRAY_IMAGE_DEFAULT="ghcr.io/xtls/xray-core:latest"
+XRAY_IMAGE_DEFAULT="ghcr.io/xtls/xray-core:26.3.27"
 ROOT_DOMAIN="${ROOT_DOMAIN:-}"
 PANEL_DOMAIN="${PANEL_DOMAIN:-}"
 HY2_DOMAIN="${HY2_DOMAIN:-}"
@@ -404,12 +404,12 @@ LE_EMAIL=$LE_EMAIL
 DEPLOY_MODE=$DEPLOY_MODE
 ALLOW_NATIVE_443_REWRITE=$ALLOW_NATIVE_443_REWRITE
 TZ=Asia/Hong_Kong
-XRAY_IMAGE=ghcr.io/xtls/xray-core:latest
+XRAY_IMAGE=ghcr.io/xtls/xray-core:26.3.27
 PANEL_IMAGE=xray-proxy-panel:local
-HYSTERIA_IMAGE=tobyxdd/hysteria:latest
+HYSTERIA_IMAGE=tobyxdd/hysteria:v2.9.2
 NGINX_IMAGE=nginx:1.27-alpine
-CERTBOT_IMAGE=certbot/certbot:latest
-FAKE_UI_VERSION=2.1.2
+CERTBOT_IMAGE=certbot/certbot:v5.2.2
+FAKE_UI_VERSION=2.2.0
 FAKE_UI_DB=/data/panel/fake-ui.db
 EOF
 }

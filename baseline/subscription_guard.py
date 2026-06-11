@@ -2,6 +2,7 @@ import json
 import time
 from collections import Counter
 
+import security
 from panel_config import SUB_ACCESS_LOG_FILE
 
 
@@ -15,11 +16,10 @@ def now_ts():
 
 def client_ip(headers=None, fallback=""):
     headers = headers or {}
-    for key in ("X-Forwarded-For", "x-forwarded-for", "X-Real-IP", "x-real-ip"):
-        value = headers.get(key)
-        if value:
-            return value.split(",", 1)[0].strip()
-    return fallback or ""
+    forwarded = headers.get("X-Forwarded-For") or headers.get("x-forwarded-for") or ""
+    if not forwarded:
+        forwarded = headers.get("X-Real-IP") or headers.get("x-real-ip") or ""
+    return security.client_ip_from_request(fallback, forwarded)
 
 
 def log_access(username, token, path, ip="", ua="", status="ok"):
