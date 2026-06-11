@@ -106,9 +106,57 @@ def test_frontend_exposes_password_reset_email_and_logout_controls():
     assert 'post("/api/password-reset/confirm"' in handlers
     assert 'data-form="self-email"' in account
     assert 'post("/api/self/email"' in handlers
+    assert 'data-form="self-password"' in account
+    assert 'name="old_password"' in account
+    assert 'name="new_password_confirm"' in account
+    assert 'data-form="self-password"' in settings
+    assert 'name="old_password"' in settings
+    assert 'name="new_password_confirm"' in settings
+    assert 'post("/api/self/password"' in handlers
+    assert "new_password_confirm" in handlers
     assert 'data-form="email-settings-save"' in settings
     assert 'post("/api/email-settings"' in read_asset("js/actions/admin.js")
     assert 'data-action="logout"' in layout
+
+
+def test_frontend_v2_sidebar_uses_collapse_control_instead_of_footer_logout():
+    layout = read_asset("js/components/layout.js")
+    layout_css = read_asset("css/layout.css")
+    components_css = read_asset("css/components.css")
+
+    assert 'class="app-shell-v2 ${sidebarCollapsed ? "side-nav-collapsed" : ""}"' in layout
+    assert 'data-action="toggle-side-nav"' in layout
+    assert "side-nav-collapse" in layout
+    assert "collapse-label" in layout
+    assert "nav-label" in layout
+    assert "side-nav-footer" in layout
+    assert "side-nav-footer" not in re.sub(
+        r'<div class="side-nav-footer">.*?</div>\s*</aside>',
+        "",
+        layout,
+        flags=re.S,
+    )
+    assert 'side-nav-footer">\n          <button class="side-nav-collapse"' in layout
+    assert 'side-nav-footer">\n          <div class="side-nav-meta"' not in layout
+    assert 'side-nav-footer">\n          <button class="secondary" data-action="logout"' not in layout
+    assert "toggleSidebarCollapsed" in layout
+    assert "fake-ui-side-nav-collapsed" in layout
+    assert "side-nav-collapsed" in layout_css
+    assert "grid-template-columns: 88px minmax(0, 1fr)" in layout_css
+    assert ".side-nav-collapsed .brand-block strong" in layout_css
+    assert ".side-nav-collapsed .collapse-label" in layout_css
+    assert ".side-nav-collapsed .side-nav .nav-item" in components_css
+    assert ".side-nav-collapsed .main-v2" in layout_css
+    assert "calc(100vw - 88px - 44px)" in layout_css
+    assert "@media (max-width: 1023px)" in components_css
+    assert ".side-nav-collapsed .side-nav .nav-label {\n    display: inline;" in components_css
+    assert "isMobileNavMode()" in layout
+    assert "syncSidebarButtonForViewport(root)" in layout
+    assert "setSidebarButtonState(button, !isMobileNavMode()" in layout
+    assert 'root.classList.remove("mobile-nav-open")' in layout
+    assert "toggleSidebarCollapsed(root.querySelector" not in layout
+    assert "const shell = root.querySelector(\".app-shell-v2\") || root;" in layout
+    assert "toggleSidebarCollapsed(shell)" in layout
 
 
 def test_frontend_v2_actions_are_split_by_domain():
@@ -126,9 +174,25 @@ def test_frontend_v2_removes_legacy_single_file_assets():
 
 
 def test_frontend_v2_mobile_shell_tokens_are_present():
-    css = read_asset("css/layout.css")
-    assert "@media (max-width: 767px)" in css
-    assert "bottom-nav" in css
+    layout = read_asset("js/components/layout.js")
+    layout_css = read_asset("css/layout.css")
+    css = layout_css + read_asset("css/components.css")
+    assert "@media (max-width: 767px)" in layout_css
+    assert 'data-action="toggle-mobile-nav"' in layout
+    assert 'data-action="toggle-account-menu"' in layout
+    assert 'data-action="close-mobile-nav"' in layout
+    assert "mobile-nav-backdrop" in layout
+    assert "account-menu-popover" in layout
+    assert "closest(\".account-menu-wrap\")" in layout
+    assert "mobile-nav-open" in css
+    assert "account-menu-open" in css
+    assert "translateX(-105%)" in css
+    assert ".topbar-title {\n  min-width: 0;\n  display: grid;\n  gap: 1px;\n}" in layout_css
+    assert ".mobile-menu-button {\n  display: none !important;\n}" in layout_css
+    assert ".mobile-menu-button {\n    display: inline-grid !important;\n  }\n\n  .side-nav" in layout_css
+    assert "grid-template-columns: 44px minmax(0, 1fr) auto" in css
+    assert "bottom-nav" not in layout
+    assert "bottom-nav" not in layout_css
     assert "min-height: 44px" in css
 
 
@@ -361,8 +425,10 @@ def test_frontend_v2_layout_prevents_dashboard_overflow():
     assert "side-nav-footer" in layout_js
     assert "nav-stack secondary" not in layout_js
     assert "nav-stack-secondary" in layout_js
-    assert "[...primaryItems, ...secondaryItems]" in layout_js
+    assert "primaryItems.map(navButton)" in layout_js
+    assert "secondaryItems.map(navButton)" in layout_js
     assert "overflow-x: hidden" in layout_css
+    assert "min-width: 320px" not in layout_css
     assert "overflow-y: auto" in layout_css
     assert "grid-template-rows: auto minmax(0, 1fr) auto" in layout_css
     assert ".side-nav-scroll" in layout_css

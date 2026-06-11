@@ -29,6 +29,15 @@ export function renderUserAccount(data = {}, shell = {}) {
         </form>
       </article>
       <article class="mobile-card">
+        <div><strong>修改密码</strong><span>需要先输入当前登录密码。</span></div>
+        <form class="form-grid" data-form="self-password">
+          <label>当前密码<input name="old_password" type="password" autocomplete="current-password" required></label>
+          <label>新密码<input name="new_password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>确认新密码<input name="new_password_confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+          <button class="secondary" type="submit">更新密码</button>
+        </form>
+      </article>
+      <article class="mobile-card">
         <div><strong>安全建议</strong><span>定期更换面板密码，订阅链接泄露后请联系管理员重置。</span></div>
         <button class="secondary" data-action="refresh" type="button">刷新账号</button>
       </article>

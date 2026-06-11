@@ -221,6 +221,58 @@ def test_user_can_update_own_email(app_modules):
     assert user_store.get_user("mailuser")["email"] == "mailuser@example.test"
 
 
+def test_user_can_change_own_password_with_current_password(app_modules):
+    api = app_modules["api"]
+    auth_store = app_modules["auth_store"]
+    user_admin = app_modules["user_admin"]
+    user_store = app_modules["user_store"]
+
+    user_admin.create_airport_user("pwuser", "30", panel_password_input="oldpass123", traffic_gb_input="1")
+
+    status, payload = api.handle_post(
+        "/api/self/password",
+        {"old_password": "wrongpass", "new_password": "newpass123"},
+        {"u": "pwuser", "r": "user", "role": "user"},
+    )
+
+    assert status == 400
+    assert payload["ok"] is False
+    assert auth_store.authenticate_user("pwuser", "oldpass123") == "user"
+
+    status, payload = api.handle_post(
+        "/api/self/password",
+        {"old_password": "oldpass123", "new_password": "newpass123"},
+        {"u": "pwuser", "r": "user", "role": "user"},
+    )
+
+    assert status == 200
+    assert payload["message"] == "password updated"
+    saved = user_store.get_user("pwuser")["panel_password"]
+    assert saved["alg"] == "pbkdf2_sha256"
+    assert saved["iter"] == 260000
+    assert auth_store.authenticate_user("pwuser", "oldpass123") is None
+    assert auth_store.authenticate_user("pwuser", "newpass123") == "user"
+
+
+def test_admin_can_change_own_password_from_self_endpoint(app_modules):
+    api = app_modules["api"]
+    auth_store = app_modules["auth_store"]
+
+    status, payload = api.handle_post(
+        "/api/self/password",
+        {"old_password": "adminpass", "new_password": "newadminpass123"},
+        admin_session(app_modules),
+    )
+
+    assert status == 200
+    assert payload["message"] == "password updated"
+    saved = auth_store.load_auth()["users"]["admin"]["password"]
+    assert saved["alg"] == "pbkdf2_sha256"
+    assert saved["iter"] == 260000
+    assert auth_store.authenticate_user("admin", "adminpass") is None
+    assert auth_store.authenticate_user("admin", "newadminpass123") == "admin"
+
+
 def test_password_reset_email_code_flow(app_modules, monkeypatch):
     api = app_modules["api"]
     ops = app_modules["operations_service"]

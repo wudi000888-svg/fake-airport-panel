@@ -64,6 +64,21 @@ label {
   border-color: var(--line);
 }
 
+.icon-button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: transparent;
+  font-size: 24px;
+  font-weight: 700;
+}
+
 .quiet-danger {
   color: var(--danger);
   border-color: #fecaca;
@@ -86,6 +101,18 @@ label {
 .side-nav .nav-item:hover {
   color: #0f766e;
   background: var(--accent-soft);
+}
+
+.side-nav-collapsed .side-nav .nav-item {
+  width: 48px;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  margin-inline: auto;
+  padding: 0;
+}
+
+.side-nav-collapsed .side-nav .nav-label {
+  display: none;
 }
 
 .nav-dot {
@@ -118,6 +145,57 @@ label {
   border-color: #bbf7d0;
   color: var(--success);
   background: var(--success-soft);
+}
+
+.account-menu-wrap {
+  position: relative;
+}
+
+.account-menu-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 50;
+  width: min(320px, calc(100vw - 28px));
+  display: none;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 18px 45px rgba(16, 24, 40, 0.16);
+}
+
+.account-menu-open .account-menu-popover {
+  display: grid;
+}
+
+.account-menu-head,
+.account-menu-popover button {
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  text-align: left;
+}
+
+.account-menu-head {
+  display: grid;
+  gap: 2px;
+}
+
+.account-menu-head span {
+  color: var(--muted);
+}
+
+.account-menu-popover button {
+  min-height: 52px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.account-menu-popover .danger-link {
+  color: var(--danger);
+  border-bottom: 0;
 }
 
 .login-screen {
@@ -832,6 +910,20 @@ code {
 
 [hidden] {
   display: none !important;
+}
+
+@media (max-width: 1023px) {
+  .side-nav-collapsed .side-nav .nav-item {
+    width: 100%;
+    grid-template-columns: 28px 1fr;
+    justify-items: stretch;
+    margin-inline: 0;
+    padding: 0 10px;
+  }
+
+  .side-nav-collapsed .side-nav .nav-label {
+    display: inline;
+  }
 }
 
 @media (max-width: 767px) {

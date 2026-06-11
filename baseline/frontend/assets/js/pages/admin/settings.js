@@ -47,6 +47,15 @@ export function renderAdminSettings(data = {}) {
         <button class="secondary" data-action="cache-clear" type="button">清理缓存</button>
       </article>
       <article class="admin-card">
+        <div><strong>修改密码</strong><span>更新当前管理员登录密码。</span></div>
+        <form class="form-grid" data-form="self-password">
+          <label>当前密码<input name="old_password" type="password" autocomplete="current-password" required></label>
+          <label>新密码<input name="new_password" type="password" autocomplete="new-password" minlength="8" required></label>
+          <label>确认新密码<input name="new_password_confirm" type="password" autocomplete="new-password" minlength="8" required></label>
+          <button class="secondary" type="submit">更新密码</button>
+        </form>
+      </article>
+      <article class="admin-card">
         <div><strong>公开注册</strong><span>${publicSettings.registration_enabled ? "已开启" : "已关闭"}</span></div>
         <form class="form-grid" data-form="public-settings-save">
           <label>允许用户注册

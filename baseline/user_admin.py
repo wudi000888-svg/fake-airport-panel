@@ -390,14 +390,24 @@ def update_airport_user(username, updates, operator="admin"):
 def user_self_update_password(username, old_password, new_password):
     if len(new_password or "") < 8:
         raise RuntimeError("new password must be at least 8 characters")
+    import auth_store
+    auth = auth_store.load_auth()
+    auth_user = (auth.get("users") or {}).get(username)
+    if auth_user:
+        if not auth_store.verify_password(old_password, auth_user.get("password", {})):
+            raise RuntimeError("current password is incorrect")
+        auth_user["password"] = auth_store.make_password_hash(new_password)
+        auth_store.save_auth(auth)
+        audit_log.write(username, "self.password", username)
+        return True
+
     data = user_store.load_users()
     user = data.get("users", {}).get(username)
     if not user:
         raise RuntimeError("user not found")
-    import auth_store
     if not auth_store.verify_password(old_password, user.get("panel_password", {})):
         raise RuntimeError("current password is incorrect")
-    user["panel_password"] = make_password_hash(new_password)
+    user["panel_password"] = auth_store.make_password_hash(new_password)
     user_store.save_users(data)
     audit_log.write(username, "self.password", username)
     return True

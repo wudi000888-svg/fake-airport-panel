@@ -1,6 +1,7 @@
 import operations_service as ops
 import user_admin
 from api_common import ok
+from http_utils import api_error
 
 
 def handle_self_post(clean, data, session):
@@ -9,7 +10,10 @@ def handle_self_post(clean, data, session):
 
     if clean == "/api/self/password":
         username = session.get("u", "")
-        user_admin.user_self_update_password(username, data.get("old_password", ""), data.get("new_password", ""))
+        try:
+            user_admin.user_self_update_password(username, data.get("old_password", ""), data.get("new_password", ""))
+        except RuntimeError as exc:
+            return api_error(str(exc), 400)
         return ok(message="password updated")
 
     if clean == "/api/self/email":

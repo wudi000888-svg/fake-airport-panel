@@ -69,6 +69,20 @@ export function bindAppActions(app, { refresh, render, loadAuthenticatedApp }) {
         });
         return;
       }
+      if (form.dataset.form === "self-password") {
+        if ((data.new_password || "") !== (data.new_password_confirm || "")) {
+          throw new Error("两次输入的新密码不一致");
+        }
+        await runAction(async () => {
+          await post("/api/self/password", {
+            old_password: data.old_password || "",
+            new_password: data.new_password || "",
+          });
+          form.reset();
+          return "密码已更新";
+        });
+        return;
+      }
       if (await handleOrderForm(form, data, context)) return;
       if (await handlePaymentForm(form, data, context)) return;
       if (await handleUserNodeForm(form, data, context)) return;
